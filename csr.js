@@ -97,7 +97,14 @@
     "avalanche", "bee", "black and white", "bling", "bounce", "clock", "fidget tap",
     "ice", "line", "shoot", "ski", "summer", "up and down", "zigzag"
   ]);
-  const modeLevelCounts = { classic: 122, run: 100, kite: 72, galaxy: 60, invader: 50, zigzag: 44 };
+  const modeLevelCounts = {
+    classic: 122,
+    galaxy: 60,
+    invader: 50,
+    kite: 72,
+    run: 100,
+    zigzag: 44
+  };
   for (const effect of Object.values(soundEffects)) {
     effect.buffer = soundContext
       ? fetch(effect.path)
@@ -123,12 +130,12 @@
     spawnPlatform: null,
     finishLine: null,
     levelMode: false,
-    castle: { floorIndex: 0, completing: false, flagLowerProgress: 0 },
     bounceFloorY: 0,
     bounceSpikes: [],
     bounceDirection: 1,
     bounceNextHazardY: 0,
     bounceHazardIndex: 0,
+    castle: { floorIndex: 0, completing: false, flagLowerProgress: 0 },
     hopGroundY: 0,
     hopObstacles: [],
     hopHoles: [],
