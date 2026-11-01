@@ -130,12 +130,15 @@
     spawnPlatform: null,
     finishLine: null,
     levelMode: false,
+    // Bounce mode course state.
     bounceFloorY: 0,
     bounceSpikes: [],
     bounceDirection: 1,
     bounceNextHazardY: 0,
     bounceHazardIndex: 0,
+    // Castle mode progression.
     castle: { floorIndex: 0, completing: false, flagLowerProgress: 0 },
+    // Hop mode course state.
     hopGroundY: 0,
     hopObstacles: [],
     hopHoles: [],
@@ -143,6 +146,7 @@
     hopPlatforms: [],
     hopNextObstacleX: 0,
     hopDistance: 0,
+    // Slime mode course and aiming state.
     slimeRails: [],
     slimeBlades: [],
     slimeSaws: [],
@@ -168,11 +172,13 @@
     color: 0,
     radius: 11,
     grounded: false,
+    // Wall and jump state for bounce and slime.
     wallSide: null,
     wallHangRemaining: 0,
     wallSlipSpeed: 0,
     coyoteTime: 0,
     airJumpAvailable: true,
+    // Hop mode state.
     hopSlammed: false,
     hopPlatform: null,
     rotation: 0
