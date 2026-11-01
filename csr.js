@@ -196,7 +196,7 @@
         <span class="home-ring outer" aria-hidden="true"></span>
         <span class="home-ring middle" aria-hidden="true"></span>
         <button class="home-play-button" data-action="start-classic" aria-label="Play Classic">
-          <svg viewBox="0 0 48 48" aria-hidden="true"><path fill="currentColor" d="M14 7.5Q14 4 17.2 6L42 22.2Q45 24 42 25.8L17.2 42Q14 44 14 40.5Z"/></svg>
+          <svg viewBox="0 0 48 48" aria-hidden="true"><path fill="currentColor" transform="translate(-5 0)" d="M14 7.5Q14 4 17.2 6L42 22.2Q45 24 42 25.8L17.2 42Q14 44 14 40.5Z"/></svg>
         </button>
       </div>
       <div class="home-menu-actions">

@@ -124,19 +124,22 @@
     }
 
     .panel.main-menu {
-      position: relative;
+      display: flex;
       width: 100%;
       height: 100%;
       max-width: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      margin-inline: auto;
+      gap: clamp(6px, 1.5cqw, 12px);
       text-align: center;
       transform: none;
     }
 
     .home-brand {
-      position: absolute;
-      top: 6%;
-      right: 2%;
-      left: 2%;
+      position: relative;
+      align-self: center;
       margin: 0;
       font-family: "Blissful Thinking", "Segoe Print", "Comic Sans MS", cursive;
       font-size: clamp(30px, 15cqw, 56px);
@@ -185,30 +188,36 @@
 
     .home-brand small {
       display: block;
+      width: 100%;
       margin-top: 8px;
       color: #f3f1f5;
       font-size: .48em;
       font-weight: 800;
       letter-spacing: .24em;
       line-height: 1;
+      text-align: center;
     }
 
     .home-play-stack {
-      position: absolute;
-      top: 29%;
-      left: 50%;
+      position: relative;
       display: grid;
       width: min(62cqw, 290px);
       aspect-ratio: 1;
+      align-self: center;
       place-items: center;
-      transform: translateX(-50%);
+    }
+
+    @property --home-ring-angle {
+      syntax: "<angle>";
+      inherits: false;
+      initial-value: 0deg;
     }
 
     .home-ring {
       position: absolute;
       border-radius: 50%;
-      background: conic-gradient(#FF0080 0 25%, #32E2F1 25% 50%, #FFE80F 50% 75%, #8C12FB 75%);
-      animation: home-ring-spin 13s linear infinite;
+      background: conic-gradient(from var(--home-ring-angle), #FF0080 0 25%, #32E2F1 25% 50%, #FFE80F 50% 75%, #8C12FB 75%);
+      animation: home-ring-color-spin 13s linear infinite;
       pointer-events: none;
     }
 
@@ -228,7 +237,9 @@
     }
     .home-ring.middle::after { inset: 12%; }
 
-    @keyframes home-ring-spin { to { transform: rotate(360deg); } }
+    @keyframes home-ring-color-spin {
+      to { --home-ring-angle: 360deg; }
+    }
 
     .home-play-button {
       position: absolute;
@@ -236,15 +247,14 @@
       left: 50%;
       z-index: 1;
       display: grid;
-      width: 44%;
+      width: 50.16%;
       aspect-ratio: 1;
       place-items: center;
-      border: 7px solid #202020;
+      border: 0;
       border-radius: 50%;
       background: #59595d;
       color: #fff;
       cursor: pointer;
-      animation: home-play-pulse 1.4s ease-in-out infinite;
       transform: translate(-50%, -50%);
     }
 
@@ -256,15 +266,8 @@
       outline-offset: 4px;
     }
 
-    @keyframes home-play-pulse {
-      0%, 100% { transform: translate(-50%, -50%) scale(1); box-shadow: 0 0 0 0 rgba(255,255,255,.22); }
-      50% { transform: translate(-50%, -50%) scale(1.08); box-shadow: 0 0 0 9px rgba(255,255,255,0); }
-    }
-
     .home-modes-banner {
-      position: absolute;
-      top: 72%;
-      left: 4%;
+      position: relative;
       display: flex;
       width: 92%;
       height: 15cqw;
@@ -284,6 +287,13 @@
       height: auto;
       overflow: visible;
       fill: #fff;
+      transform-origin: center;
+      animation: home-banner-star-pulse 1.2s ease-in-out infinite;
+    }
+
+    @keyframes home-banner-star-pulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.22); }
     }
 
     .action-button.home-modes-button {
@@ -325,14 +335,20 @@
       pointer-events: none;
     }
 
-    .home-menu-actions { display: contents; }
+    .home-menu-actions {
+      display: flex;
+      width: 100%;
+      flex-direction: column;
+      align-items: center;
+      align-self: center;
+      gap: clamp(6px, 1.5cqw, 12px);
+    }
 
     .home-mode-links {
-      position: absolute;
-      top: 86%;
-      right: 3%;
-      left: 3%;
+      position: relative;
       display: grid;
+      width: 94%;
+      align-self: center;
       grid-template-columns: repeat(5, minmax(0, 1fr));
       gap: 2px;
     }
@@ -368,6 +384,23 @@
       width: 64%;
       height: 64%;
       fill: currentColor;
+      transform-box: view-box;
+      transform-origin: center;
+      animation: home-mode-symbol-spin var(--symbol-spin-duration, 4s) linear infinite;
+    }
+
+    .home-mode-button:nth-child(even) .home-mode-icon svg {
+      animation-direction: reverse;
+    }
+
+    .home-mode-button:nth-child(1) .home-mode-icon svg { --symbol-spin-duration: 5s; }
+    .home-mode-button:nth-child(2) .home-mode-icon svg { --symbol-spin-duration: 3.5s; }
+    .home-mode-button:nth-child(3) .home-mode-icon svg { --symbol-spin-duration: 4.5s; }
+    .home-mode-button:nth-child(4) .home-mode-icon svg { --symbol-spin-duration: 3.8s; }
+    .home-mode-button:nth-child(5) .home-mode-icon svg { --symbol-spin-duration: 4.2s; }
+
+    @keyframes home-mode-symbol-spin {
+      to { transform: rotate(360deg); }
     }
 
     .home-mode-button:focus-visible {
@@ -937,8 +970,6 @@
       .panel:not(.mode-browser) { transform: scale(.88); }
       .panel.main-menu { transform: none; }
       .home-play-stack { width: min(58cqw, 210px); }
-      .home-brand { top: 4%; }
-      .home-mode-links { top: 88%; }
       .mode-list { gap: 5px; }
       .mode-entry { min-height: clamp(48px, 24cqw, 78px); }
       .mode-banner { min-height: clamp(40px, 19cqw, 60px); }
