@@ -31,6 +31,73 @@
     button: { path: "assets/fonts/button.wav", volume: 0.25 }
   };
   const endlessModeEnabled = new Map([["classic", true], ["bounce", true], ["hop", true], ["slime", true]]);
+  // Mode-browser catalog: featured first, remaining modes alphabetically.
+  const featuredModes = ["classic", "run", "kite", "galaxy", "invader"];
+  const modeBannerColors = {
+    autumn: "#C66B32",
+    avalanche: "#B8E9FA",
+    bee: "#FFE80F",
+    "black and white": "#E8E8E8",
+    bling: "#F5C842",
+    block: "#8C12FB",
+    bounce: "#32E2F1",
+    break: "#F24958",
+    brick: "#B84B3C",
+    castle: "#5B0878",
+    cave: "#566477",
+    christmas: "#D83B4F",
+    circle: "#FF0080",
+    circular: "#25B99A",
+    classic: "#010101",
+    climb: "#63B95D",
+    clock: "#F4A62A",
+    "color fly": "#23B9CD",
+    "color swap": "#8C12FB",
+    compass: "#348CC5",
+    control: "#8260C8",
+    dodge: "#E75083",
+    "fidget spinner": "#35BDD2",
+    "fidget tap": "#F5CA45",
+    fruit: "#F36D64",
+    galaxy: "#17285F",
+    gravity: "#5865F2",
+    hop: "#FF0080",
+    ice: "#AEEBFF",
+    invader: "#42103F",
+    jump: "#51B76B",
+    kite: "#7341A5",
+    lava: "#F15B32",
+    line: "#E2C94C",
+    loop: "#39BFA1",
+    magma: "#B73048",
+    "mini golf": "#62A957",
+    ocean: "#168FC4",
+    punch: "#EF635B",
+    reverse: "#9A68E8",
+    rocket: "#E75D68",
+    run: "#B51C38",
+    shoot: "#F4C842",
+    ski: "#8AD8F5",
+    sled: "#DF5365",
+    slide: "#48BCE3",
+    slime: "#75B943",
+    spin: "#BD6AED",
+    summer: "#FDBB3F",
+    swoop: "#27B9AE",
+    target: "#F06565",
+    tower: "#9370DB",
+    track: "#45A992",
+    turn: "#EF8F45",
+    "up and down": "#64C8E8",
+    volcano: "#EC4D3D",
+    warp: "#7A52E8",
+    zigzag: "#EAA13C"
+  };
+  const darkBannerTextModes = new Set([
+    "avalanche", "bee", "black and white", "bling", "bounce", "clock", "fidget tap",
+    "ice", "line", "shoot", "ski", "summer", "up and down", "zigzag"
+  ]);
+  const modeLevelCounts = { classic: 122, run: 100, kite: 72, galaxy: 60, invader: 50, zigzag: 44 };
   for (const effect of Object.values(soundEffects)) {
     effect.buffer = soundContext
       ? fetch(effect.path)
@@ -48,9 +115,61 @@
   const colors = ["#32E2F1", "#FFE80F", "#8C12FB", "#FF0080"];
   const spinSpeed = 0.65;
   const trailLifetime = 0.32;
-  const world = { rings: [], stars: [], pickups: [], trail: [], spawnPlatform: null, finishLine: null, levelMode: false, bounceFloorY: 0, bounceSpikes: [], bounceDirection: 1, bounceNextHazardY: 0, bounceHazardIndex: 0, hopGroundY: 0, hopObstacles: [], hopHoles: [], hopSaws: [], hopPlatforms: [], hopNextObstacleX: 0, hopDistance: 0, slimeRails: [], slimeBlades: [], slimeSaws: [], slimeNextY: 0, slimeAimX: 0, slimeAimY: 0, slimeShot: null, slimeJumpHeight: 0, slimeDistance: 0, score: 0, mode: "classic", elapsed: 0, running: false, lastTime: 0, trailClock: 0 };
-  const playableModes = new Set(["classic", "bounce", "hop", "slime"]);
-  const player = { x: 0, y: 0, velocity: 0, velocityX: 0, color: 0, radius: 11, grounded: false, wallSide: null, wallHangRemaining: 0, wallSlipSpeed: 0, coyoteTime: 0, airJumpAvailable: true, hopSlammed: false, hopPlatform: null, rotation: 0 };
+  const world = {
+    rings: [],
+    stars: [],
+    pickups: [],
+    trail: [],
+    spawnPlatform: null,
+    finishLine: null,
+    levelMode: false,
+    castle: { floorIndex: 0, completing: false, flagLowerProgress: 0 },
+    bounceFloorY: 0,
+    bounceSpikes: [],
+    bounceDirection: 1,
+    bounceNextHazardY: 0,
+    bounceHazardIndex: 0,
+    hopGroundY: 0,
+    hopObstacles: [],
+    hopHoles: [],
+    hopSaws: [],
+    hopPlatforms: [],
+    hopNextObstacleX: 0,
+    hopDistance: 0,
+    slimeRails: [],
+    slimeBlades: [],
+    slimeSaws: [],
+    slimeNextY: 0,
+    slimeAimX: 0,
+    slimeAimY: 0,
+    slimeShot: null,
+    slimeJumpHeight: 0,
+    slimeDistance: 0,
+    score: 0,
+    mode: "classic",
+    elapsed: 0,
+    running: false,
+    lastTime: 0,
+    trailClock: 0
+  };
+  const playableModes = new Set(["classic", "bounce", "hop", "slime", "castle"]);
+  const player = {
+    x: 0,
+    y: 0,
+    velocity: 0,
+    velocityX: 0,
+    color: 0,
+    radius: 11,
+    grounded: false,
+    wallSide: null,
+    wallHangRemaining: 0,
+    wallSlipSpeed: 0,
+    coyoteTime: 0,
+    airJumpAvailable: true,
+    hopSlammed: false,
+    hopPlatform: null,
+    rotation: 0
+  };
   const baseStarRadius = 18;
   const basePickupRadius = 14;
   let width = 0;
@@ -58,6 +177,7 @@
   let pixelRatio = 1;
   const gravity = 1180;
   const jumpVelocity = -420;
+  // Bounce mode physics.
   const bounceSpeed = 320;
   const bounceJumpVelocity = -700;
   const bounceGravity = 900;
@@ -65,12 +185,16 @@
   const bounceWallSlipAcceleration = 2.4;
   const bounceWallSlipMaxSpeed = 900;
   const coyoteDuration = 0.13;
+  // Castle mode course layout.
+  const castleHazardLayouts = [[0.35, 0.67], [0.48], [0.32, 0.67], [0.45, 0.72], []];
+  // Hop mode physics.
   const hopSpeed = 185;
   const hopTrailLifetime = 0.42;
-  const slimeGravity = 820;
   const hopJumpVelocity = -430;
   const hopGravity = 360;
   const hopSlamSpeed = 1050;
+  // Slime mode physics.
+  const slimeGravity = 820;
   const shapeTypes = ["circle", "triangle", "square", "hexagon"];
   function ringRadius() {
     return Math.min(width * 0.29, 122 * gameScale());
@@ -78,6 +202,22 @@
 
   function gameScale() {
     return Math.min(width / 460, 1);
+  }
+
+  function castleLeftWall() {
+    return width * 0.18;
+  }
+
+  function castleRightWall() {
+    return width * 0.82;
+  }
+
+  function castleFloorY(floorIndex) {
+    return height * (0.82 - floorIndex * 0.135);
+  }
+
+  function castleFlagX() {
+    return castleLeftWall() + (castleRightWall() - castleLeftWall()) * 0.78;
   }
 
   function starRadius() {
@@ -168,8 +308,15 @@
     canvas.height = Math.round(height * pixelRatio);
     context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
     player.radius = 11 * gameScale();
-    player.x = world.running && world.mode === "hop" ? width * 0.26 : width / 2;
+    player.x = world.running && world.mode === "hop"
+      ? width * 0.26
+      : world.running && world.mode === "castle"
+      ? castleLeftWall() + player.radius
+      : width / 2;
     if (!world.running) player.y = height * 0.72;
+    if (world.running && world.mode === "castle" && player.grounded) {
+      player.y = castleFloorY(world.castle.floorIndex) - player.radius;
+    }
     world.bounceFloorY = height * 0.78;
     if (world.running && world.mode === "bounce" && player.grounded) player.y = world.bounceFloorY - player.radius;
     for (const ring of world.rings) {
@@ -179,11 +326,14 @@
     for (const item of [...world.stars, ...world.pickups]) item.x = width / 2;
   }
 
+  // Screen: main menu.
   function showMenu() {
     world.running = false;
     setBackgroundMusic("menu");
     panel.className = "panel main-menu";
     controls.setAttribute("aria-label", "Jump controls");
+    controls.classList.remove("castle-controls");
+    hud.classList.remove("castle-hud");
     document.getElementById("jump-button").textContent = "TAP TO BOUNCE";
     document.getElementById("jump-button").setAttribute("aria-label", "Jump");
     controls.querySelector(".hint").textContent = "Tap, click, or press SPACE";
@@ -196,7 +346,7 @@
         <span class="home-ring outer" aria-hidden="true"></span>
         <span class="home-ring middle" aria-hidden="true"></span>
         <button class="home-play-button" data-action="start-classic" aria-label="Play Classic">
-          <svg viewBox="0 0 48 48" aria-hidden="true"><path fill="currentColor" transform="translate(-5 0)" d="M14 7.5Q14 4 17.2 6L42 22.2Q45 24 42 25.8L17.2 42Q14 44 14 40.5Z"/></svg>
+          <svg viewBox="0 0 48 48" aria-hidden="true"><path fill="currentColor" transform="translate(-4.75 0)" d="M14 7.5Q14 4 17.2 6L42 22.2Q45 24 42 25.8L17.2 42Q14 44 14 40.5Z"/></svg>
         </button>
       </div>
       <div class="home-menu-actions">
@@ -222,129 +372,32 @@
     panel.querySelector('[data-home-action="modes"]').addEventListener("click", showModes);
   }
 
-  function showLevelSelect(modeName) {
-    setBackgroundMusic("menu");
-    const modeTitle = modeName[0].toUpperCase() + modeName.slice(1);
-    const endlessAvailable = endlessModeEnabled.get(modeName) === true;
-    panel.className = "panel";
-    panel.innerHTML = `
-      <div class="level-select">
-        <p class="eyebrow">${modeTitle} MODE</p>
-        <h1>CHOOSE<br><span class="title-accent">A RUN</span></h1>
-        <p class="subtitle">Level 1 is a basic, easy course. Reach the finish line to complete it.</p>
-        <button class="action-button level-choice" data-start-level>
-          <strong>LEVEL 1</strong><small>BASIC · EASY</small>
-        </button>
-        ${endlessAvailable ? '<button class="action-button secondary level-choice" data-start-endless>ENDLESS MODE</button>' : ""}
-        <button class="mode-back" data-action="back-modes">BACK TO MODES</button>
-      </div>
-    `;
-    panel.querySelector("[data-start-level]").addEventListener("click", () => startGame(modeName, true));
-    panel.querySelector("[data-start-endless]")?.addEventListener("click", () => startGame(modeName));
-    panel.querySelector('[data-action="back-modes"]').addEventListener("click", showModes);
-  }
-
+  // Screen: mode browser.
   function showModes() {
     setBackgroundMusic("menu");
-    const levelModes = [
-      "autumn", "avalanche", "bee", "black and white", "bling", "block", "bounce",
-      "break", "brick", "castle", "cave", "christmas", "circle", "circular", "climb", "hop",
-      "clock", "color fly", "color swap", "compass", "control", "dodge", "fidget spinner",
-      "fidget tap", "fruit", "galaxy", "gravity", "ice", "invader", "jump", "kite", "lava",
-      "line", "loop", "magma", "mini golf", "ocean", "punch", "reverse", "rocket", "run", "shoot", "ski", "sled", "slide",
-      "slime", "spin", "summer", "swoop", "target", "tower", "track", "turn", "up and down",
-      "volcano", "warp", "zigzag"
-    ];
-    const featuredModes = ["classic", "run", "kite", "galaxy", "invader"];
-    const otherModes = levelModes.filter((name) => !featuredModes.includes(name));
     const modeRows = [
-      { name: "classic", levels: 122 },
-      { name: "run", levels: 100 },
-      { name: "kite", levels: 72 },
-      { name: "galaxy", levels: 60 },
-      { name: "invader", levels: 50 },
-      ...otherModes.map((name, index) => ({ name, levels: name === "zigzag" ? 44 : 45 }))
-    ];
+      ...featuredModes,
+      ...Object.keys(modeBannerColors)
+        .filter((name) => !featuredModes.includes(name))
+        .sort()
+    ].map((name) => ({ name, levels: modeLevelCounts[name] ?? 45 }));
     const totalLevels = modeRows.reduce((total, mode) => total + mode.levels, 0);
-    const themes = {
-      classic: ["#010101", ""],
-      autumn: ["#C66B32", "❧"],
-      avalanche: ["#B8E9FA", "❄", "#272727"],
-      bee: ["#FFE80F", "✹", "#272727"],
-      "black and white": ["#E8E8E8", "◐", "#272727"],
-      bling: ["#F5C842", "✦", "#272727"],
-      block: ["#8C12FB", "▪"],
-      bounce: ["#32E2F1", "↕", "#272727"],
-      hop: ["#FF0080", "↗"],
-      break: ["#F24958", "✕"],
-      brick: ["#B84B3C", "▤"],
-      castle: ["#9183B6", "♜"],
-      cave: ["#566477", "◒"],
-      christmas: ["#D83B4F", "✳"],
-      circle: ["#FF0080", "○"],
-      circular: ["#25B99A", "◎"],
-      climb: ["#63B95D", "↟"],
-      clock: ["#F4A62A", "◷", "#272727"],
-      "color fly": ["#23B9CD", "⌁"],
-      "color swap": ["#8C12FB", "⇄"],
-      compass: ["#348CC5", "✥"],
-      control: ["#8260C8", "⌘"],
-      dodge: ["#E75083", "⤴"],
-      "fidget spinner": ["#35BDD2", "✣"],
-      "fidget tap": ["#F5CA45", "⊙", "#272727"],
-      fruit: ["#F36D64", "◉"],
-      galaxy: ["#17285F", "✦"],
-      gravity: ["#5865F2", "↓"],
-      ice: ["#AEEBFF", "❄", "#272727"],
-      invader: ["#42103F", "●"],
-      jump: ["#51B76B", "↑"],
-      kite: ["#7341A5", "◇"],
-      lava: ["#F15B32", "▲"],
-      line: ["#E2C94C", "━", "#272727"],
-      loop: ["#39BFA1", "∞"],
-      magma: ["#B73048", "◈"],
-      "mini golf": ["#62A957", "⛳"],
-      ocean: ["#168FC4", "≋"],
-      punch: ["#EF635B", "✊"],
-      reverse: ["#9A68E8", "↶"],
-      rocket: ["#E75D68", "↑"],
-      run: ["#B51C38", "↗"],
-      shoot: ["#F4C842", "➤", "#272727"],
-      ski: ["#8AD8F5", "⌁", "#272727"],
-      sled: ["#DF5365", "▱"],
-      slide: ["#48BCE3", "⇢"],
-      slime: ["#75B943", "●"],
-      spin: ["#BD6AED", "⟳"],
-      summer: ["#FDBB3F", "☀", "#272727"],
-      swoop: ["#27B9AE", "⤵"],
-      target: ["#F06565", "◎"],
-      tower: ["#9370DB", "▥"],
-      track: ["#45A992", "▰"],
-      turn: ["#EF8F45", "↪"],
-      "up and down": ["#64C8E8", "↕", "#272727"],
-      volcano: ["#EC4D3D", "▲"],
-      warp: ["#7A52E8", "✦"],
-      zigzag: ["#EAA13C", "⚡", "#272727"]
-    };
     const renderModeEntry = ({ name, levels }, index) => {
-      const [color, symbol, ink = "#fff"] = themes[name];
+      const color = modeBannerColors[name];
+      const ink = darkBannerTextModes.has(name) ? "#272727" : "#fff";
       const classicLoop = name === "classic"
         ? '<span class="mode-classic-loop" aria-hidden="true"></span>'
         : "";
-      const modeSymbol = symbol
-        ? `<span class="mode-symbol">${symbol}</span>`
-        : "";
-      const modeName = name === "run"
-        ? [...name.toUpperCase()].map((letter, letterIndex) =>
-          `<span class="mode-letter" style="--letter-index:${letterIndex}">${letter}</span>`
-        ).join("")
+      const modeName = name === "castle"
+        ? '<span class="castle-mode-title">CA<span class="castle-letter-s">S</span><span class="castle-letter-t">T</span>LE</span>'
         : name;
-      const runGround = name === "run"
-        ? '<span class="mode-run-ground" aria-hidden="true"><span class="mode-run-scallops"></span></span>'
+      const castleBall = name === "castle"
+        ? '<span class="castle-mode-ball" aria-hidden="true"></span>'
         : "";
+      const nameScale = Math.min(1, 10 / name.length);
       return `
-        <div class="mode-entry" style="--entry-order:${index};--banner-color:${color};--banner-ink:${ink};--banner-shadow:${ink === "#272727" ? "none" : "0 1px 2px rgba(0,0,0,.3)"}">
-          <button class="mode-banner${name === "classic" ? " mode-banner-classic" : ""}${name === "run" ? " mode-banner-run" : ""}" data-select-mode="${name}">${modeSymbol}<span class="mode-name">${modeName}</span>${classicLoop}${runGround}</button>
+        <div class="mode-entry" style="--entry-order:${index};--banner-color:${color};--banner-ink:${ink};--banner-shadow:${ink === "#272727" ? "none" : "0 1px 2px rgba(0,0,0,.3)"};--mode-name-scale:${nameScale}">
+          <button class="mode-banner" data-select-mode="${name}"><span class="mode-name">${modeName}</span>${castleBall}${classicLoop}</button>
           <div class="mode-progress" aria-label="${name}: 0 percent complete, 0 of ${levels} levels completed">
             <strong>0%</strong><span>0 / ${levels}</span>
           </div>
@@ -377,6 +430,32 @@
     panel.querySelector('[data-action="home"]').addEventListener("click", showMenu);
   }
 
+  // Screen: level selection.
+  function showLevelSelect(modeName) {
+    setBackgroundMusic("menu");
+    const modeTitle = modeName[0].toUpperCase() + modeName.slice(1);
+    const endlessAvailable = endlessModeEnabled.get(modeName) === true;
+    panel.className = "panel";
+    panel.innerHTML = `
+      <div class="level-select">
+        <p class="eyebrow">${modeTitle} MODE</p>
+        <h1>CHOOSE<br><span class="title-accent">A RUN</span></h1>
+        <p class="subtitle">${modeName === "castle"
+          ? "Roll across each floor, leap over spikes, and reach the flag at the top."
+          : "Level 1 is a basic, easy course. Reach the finish line to complete it."}</p>
+        <button class="action-button level-choice" data-start-level>
+          <strong>LEVEL 1</strong><small>BASIC · EASY</small>
+        </button>
+        ${endlessAvailable ? '<button class="action-button secondary level-choice" data-start-endless>ENDLESS MODE</button>' : ""}
+        <button class="mode-back" data-action="back-modes">BACK TO MODES</button>
+      </div>
+    `;
+    panel.querySelector("[data-start-level]").addEventListener("click", () => startGame(modeName, true));
+    panel.querySelector("[data-start-endless]")?.addEventListener("click", () => startGame(modeName));
+    panel.querySelector('[data-action="back-modes"]').addEventListener("click", showModes);
+  }
+
+  // Screen: work-in-progress and result overlays.
   function showWipMode(modeName, endlessEnabled) {
     setBackgroundMusic("menu");
     const modeTitle = modeName === "classic" ? "Classic" : modeName;
@@ -519,13 +598,18 @@
     world.elapsed = 0;
     world.running = true;
     world.lastTime = performance.now();
-    player.x = width / 2;
+    world.castle = { floorIndex: 0, completing: false, flagLowerProgress: 0 };
+    player.x = mode === "castle" ? castleLeftWall() + player.radius : width / 2;
     world.bounceFloorY = height * 0.78;
     world.bounceDirection = 1;
-    player.y = mode === "bounce" ? world.bounceFloorY - player.radius : height * 0.72;
+    player.y = mode === "castle"
+      ? castleFloorY(0) - player.radius
+      : mode === "bounce"
+      ? world.bounceFloorY - player.radius
+      : height * 0.72;
     player.velocity = 0;
     player.velocityX = 0;
-    player.grounded = mode === "bounce";
+    player.grounded = mode === "bounce" || mode === "castle";
     player.wallSide = null;
     player.wallHangRemaining = 0;
     player.wallSlipSpeed = 0;
@@ -576,7 +660,7 @@
       world.slimeAimY = height * 0.53;
       ensureSlimeCourse();
     }
-    if (levelMode) {
+    if (levelMode && mode !== "castle") {
       const verticalDistance = height * (mode === "slime" ? 3.6 : mode === "bounce" ? 3.8 : 4.4);
       world.finishLine = mode === "hop"
         ? { orientation: "vertical", x: player.x + width * 6, y: null, thickness: 28 * gameScale() }
@@ -597,9 +681,11 @@
     scoreElement.parentElement.querySelector(".score-label").textContent = "Stars collected";
     const modeTitle = mode[0].toUpperCase() + mode.slice(1);
     modeChip.textContent = levelMode ? `${modeTitle} · Level 1` : mode === "classic" ? "Classic ∞" : `${modeTitle} ∞`;
-    controls.setAttribute("aria-label", mode === "slime" ? "Slime aiming controls" : mode === "bounce" ? "Bounce controls" : mode === "hop" ? "Hop controls" : "Jump controls");
+    controls.setAttribute("aria-label", mode === "slime" ? "Slime aiming controls" : mode === "bounce" ? "Bounce controls" : mode === "hop" ? "Hop controls" : mode === "castle" ? "Castle controls" : "Jump controls");
+    controls.classList.toggle("castle-controls", mode === "castle");
+    hud.classList.toggle("castle-hud", mode === "castle");
     const jumpButton = document.getElementById("jump-button");
-    jumpButton.textContent = mode === "slime" ? "AIM & LEAP" : mode === "hop" ? "TAP TO JUMP / SLAM" : mode === "bounce" ? "TAP TO JUMP" : "TAP TO BOUNCE";
+    jumpButton.textContent = mode === "slime" ? "AIM & LEAP" : mode === "hop" ? "TAP TO JUMP / SLAM" : mode === "bounce" || mode === "castle" ? "TAP TO JUMP" : "TAP TO BOUNCE";
     jumpButton.setAttribute("aria-label", "Jump");
     controls.querySelector(".hint").textContent = mode === "slime"
       ? "Aim and launch · Space to shoot"
@@ -607,6 +693,8 @@
       ? "Auto-roll · tap to leap, tap again to slam"
       : mode === "bounce"
       ? "Leap wall to wall · hold, then slide · chain jumps"
+      : mode === "castle"
+      ? "Roll across each floor · tap to leap over spikes"
       : "Tap, click, or press SPACE";
     if (mode === "hop") scoreElement.parentElement.querySelector(".score-label").textContent = "Stars collected";
     if (mode === "hop") {
@@ -616,6 +704,16 @@
     if (mode === "bounce") {
       world.stars = [];
       ensureBounceCourse();
+    }
+    if (mode === "castle") {
+      const starPositions = [0.52, 0.8, 0.52, 0.2, 0.52];
+      world.stars = Array.from({ length: 5 }, (_, floorIndex) => ({
+        x: castleLeftWall() + (castleRightWall() - castleLeftWall()) * starPositions[floorIndex],
+        y: castleFloorY(floorIndex) - player.radius - 24 * gameScale(),
+        collected: false,
+        rotation: 0,
+        pulse: Math.random() * Math.PI * 2
+      }));
     }
     hud.classList.add("visible");
     controls.classList.add("visible");
@@ -627,6 +725,13 @@
   function jump() {
     if (!world.running) return;
     unlockSoundEffects();
+    if (world.mode === "castle") {
+      if (world.castle.completing || !player.grounded) return;
+      player.velocity = jumpVelocity * gameScale();
+      player.grounded = false;
+      playSound(jumpSound, "jump.wav");
+      return;
+    }
     if (world.mode === "slime") {
       if (world.slimeShot || (player.wallSide === null && !player.grounded)) return;
       const plan = getSlimeShotPlan(player.x, player.y);
@@ -704,6 +809,108 @@
   function drawBackground() {
     context.fillStyle = "#272727";
     context.fillRect(0, 0, width, height);
+  }
+
+  function drawCastleArena() {
+    const scale = gameScale();
+    const leftWall = castleLeftWall();
+    const rightWall = castleRightWall();
+    const wallWidth = 5 * scale;
+    const floorColors = ["#FFE80F", "#32E2F1", "#8C12FB", "#FF0080", "#8C12FB"];
+    const castle = world.castle;
+
+    context.fillStyle = "#29292b";
+    context.fillRect(leftWall, 0, rightWall - leftWall, height);
+
+    context.save();
+    context.globalAlpha = 0.1;
+    context.strokeStyle = "#8b8790";
+    context.lineWidth = scale;
+    for (let row = 0; row < 12; row += 1) {
+      const y = row * 36 * scale;
+      const offset = row % 2 ? 18 * scale : 0;
+      for (let x = leftWall + offset; x < rightWall; x += 36 * scale) {
+        context.strokeRect(x, y, 34 * scale, 16 * scale);
+      }
+    }
+    context.restore();
+
+    context.fillStyle = "#FFFFFF";
+    context.fillRect(leftWall - wallWidth / 2, 0, wallWidth, height);
+    context.fillRect(rightWall - wallWidth / 2, 0, wallWidth, height);
+    for (let y = 4 * scale; y < height; y += 14 * scale) {
+      context.beginPath();
+      context.arc(rightWall, y, 3 * scale, -Math.PI / 2, Math.PI / 2);
+      context.fill();
+    }
+
+    for (let floorIndex = 0; floorIndex < 5; floorIndex += 1) {
+      const floorY = castleFloorY(floorIndex);
+      const tileHeight = 11 * scale;
+      const tileWidth = 22 * scale;
+      const tileGap = 2 * scale;
+      context.fillStyle = "#171719";
+      for (let tileX = leftWall; tileX < rightWall; tileX += tileWidth) {
+        const currentWidth = Math.min(tileWidth - tileGap, rightWall - tileX);
+        context.fillRect(tileX, floorY, currentWidth, tileHeight);
+      }
+      context.fillStyle = floorColors[floorIndex];
+      for (let tileX = leftWall; tileX < rightWall; tileX += tileWidth) {
+        const currentWidth = Math.min(tileWidth - tileGap, rightWall - tileX);
+        context.beginPath();
+        context.roundRect(tileX, floorY, currentWidth, tileHeight, 2 * scale);
+        context.fill();
+      }
+      context.fillStyle = "rgba(255,255,255,.28)";
+      context.fillRect(leftWall, floorY, rightWall - leftWall, 1.5 * scale);
+
+      const spikeHeight = 16 * scale;
+      const spikeWidth = 8 * scale;
+      for (const position of castleHazardLayouts[floorIndex]) {
+        const centerX = leftWall + (rightWall - leftWall) * position;
+        for (let spike = -1; spike <= 1; spike += 1) {
+          const spikeX = centerX + spike * spikeWidth;
+          context.fillStyle = spike === 0 ? "#FFE80F" : "#FF0080";
+          context.beginPath();
+          context.moveTo(spikeX - spikeWidth / 2, floorY);
+          context.lineTo(spikeX, floorY - spikeHeight);
+          context.lineTo(spikeX + spikeWidth / 2, floorY);
+          context.closePath();
+          context.fill();
+        }
+      }
+
+      if (floorIndex < 4) {
+        const ledgeY = floorY - 34 * scale;
+        const ledgeX = leftWall + (rightWall - leftWall) * (floorIndex % 2 ? 0.2 : 0.58);
+        context.fillStyle = floorColors[floorIndex + 1];
+        for (let tile = 0; tile < 4; tile += 1) {
+          context.beginPath();
+          context.roundRect(ledgeX + tile * 18 * scale, ledgeY, 16 * scale, 8 * scale, 2 * scale);
+          context.fill();
+        }
+      }
+    }
+
+    const flagX = castleFlagX();
+    const topFloorY = castleFloorY(4);
+    const flagLowering = castle.flagLowerProgress * 27 * scale;
+    const poleTop = topFloorY - 56 * scale + flagLowering;
+    context.fillStyle = "#32E2F1";
+    context.fillRect(flagX - 2 * scale, poleTop, 4 * scale, topFloorY - poleTop);
+    context.beginPath();
+    context.arc(flagX, poleTop, 5 * scale, 0, Math.PI * 2);
+    context.fill();
+    const flagXStart = flagX - 29 * scale;
+    const flagY = poleTop + 6 * scale;
+    const cell = 6 * scale;
+    for (let row = 0; row < 4; row += 1) {
+      for (let column = 0; column < 5; column += 1) {
+        context.fillStyle = (row + column) % 2 ? "#272727" : "#FFFFFF";
+        context.fillRect(flagXStart + column * cell, flagY + row * cell, cell, cell);
+      }
+    }
+
   }
 
   function drawSlimeArena() {
@@ -1516,11 +1723,79 @@
     );
   }
 
+  function updateCastle(delta) {
+    const castle = world.castle;
+    if (castle.completing) {
+      castle.flagLowerProgress = Math.min(1, castle.flagLowerProgress + delta / 0.85);
+      if (castle.flagLowerProgress >= 1) {
+        showLevelComplete();
+        return false;
+      }
+      return true;
+    }
+
+    const leftWall = castleLeftWall();
+    const rightWall = castleRightWall();
+    const floorY = castleFloorY(castle.floorIndex);
+    const previousY = player.y;
+    const scale = gameScale();
+    const playerSpeed = 155 * scale;
+    player.rotation += playerSpeed * delta / Math.max(1, player.radius);
+    player.x = Math.min(rightWall - player.radius, player.x + playerSpeed * delta);
+
+    if (!player.grounded) {
+      player.velocity += gravity * scale * delta;
+      player.y += player.velocity * delta;
+      if (player.velocity >= 0
+        && previousY + player.radius <= floorY
+        && player.y + player.radius >= floorY) {
+        player.y = floorY - player.radius;
+        player.velocity = 0;
+        player.grounded = true;
+      }
+    } else {
+      player.y = floorY - player.radius;
+    }
+
+    for (const position of castleHazardLayouts[castle.floorIndex]) {
+      const spikeX = leftWall + (rightWall - leftWall) * position;
+      const nearSpike = Math.abs(player.x - spikeX) < 14 * scale + player.radius * 0.6;
+      const overlappingSpikeHeight = player.y + player.radius > floorY - 16 * scale;
+      if (nearSpike && overlappingSpikeHeight) {
+        showGameOver();
+        return false;
+      }
+    }
+
+    if (castle.floorIndex === 4 && player.x + player.radius >= castleFlagX()) {
+      player.x = castleFlagX();
+      if (player.grounded) castle.completing = true;
+      return true;
+    }
+
+    if (player.x + player.radius >= rightWall) {
+      player.x = rightWall - player.radius;
+      if (!player.grounded) return true;
+      if (castle.floorIndex === 4) {
+        castle.completing = true;
+        return true;
+      }
+      castle.floorIndex += 1;
+      player.x = leftWall + player.radius;
+      player.y = castleFloorY(castle.floorIndex) - player.radius;
+      player.velocity = 0;
+      player.grounded = true;
+    }
+    return true;
+  }
+
   function update(delta) {
     world.elapsed += delta;
     const previousX = player.x;
     const previousY = player.y;
-    if (world.mode === "hop") {
+    if (world.mode === "castle") {
+      if (!updateCastle(delta)) return false;
+    } else if (world.mode === "hop") {
       const difficulty = hopDifficulty();
       const travel = hopSpeed * (1 + difficulty * 0.35) * gameScale() * delta;
       world.hopDistance += travel;
@@ -1700,7 +1975,7 @@
     const hangingOnBounceWall = world.mode === "bounce"
       && player.wallSide !== null
       && player.wallHangRemaining > 0;
-    if (world.mode !== "hop" && world.mode !== "slime" && !hangingOnBounceWall && !(world.mode === "bounce" && player.wallSide !== null)) {
+    if (world.mode !== "hop" && world.mode !== "slime" && world.mode !== "castle" && !hangingOnBounceWall && !(world.mode === "bounce" && player.wallSide !== null)) {
       player.velocity += (world.mode === "bounce" ? bounceGravity : gravity) * gameScale() * delta;
       player.y += player.velocity * delta;
     }
@@ -1740,7 +2015,7 @@
       return echo.age < (world.mode === "hop" ? hopTrailLifetime : trailLifetime);
     });
     if (!checkRingContacts(previousX, previousY)) return false;
-    keepWorldInView();
+    if (world.mode !== "castle") keepWorldInView();
     world.trailClock += delta;
     if (world.trailClock >= 0.035) {
       world.trailClock %= 0.035;
@@ -1812,6 +2087,7 @@
 
   function draw() {
     drawBackground();
+    if (world.mode === "castle") drawCastleArena();
     if (world.mode === "bounce") drawBounceArena();
     if (world.mode === "slime") drawSlimeArena();
     drawFinishLine();
