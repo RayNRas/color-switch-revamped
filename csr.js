@@ -516,6 +516,7 @@
     panel.querySelector('[data-action="menu"]').addEventListener("click", showMenu);
   }
 
+  // Shared gameplay setup and level initialization.
   function makeRing(y) {
     const shape = shapeTypes[Math.floor(Math.random() * shapeTypes.length)];
     const sides = shape === "hexagon" ? 6 : shape === "triangle" ? 3 : 4;
@@ -788,6 +789,7 @@
     playSound(jumpSound, "jump.wav");
   }
 
+  // Gameplay input and mode-specific arenas.
   function handleInput(event) {
     if (world.running && world.mode === "slime") {
       if (event.code === "ArrowUp" || event.code === "ArrowDown") {
@@ -811,6 +813,7 @@
     context.fillRect(0, 0, width, height);
   }
 
+  // Castle mode arena.
   function drawCastleArena() {
     const scale = gameScale();
     const leftWall = castleLeftWall();
@@ -913,6 +916,7 @@
 
   }
 
+  // Slime mode arena, hazards, and course generation.
   function drawSlimeArena() {
     const wallWidth = 12 * gameScale();
     context.fillStyle = "#202020";
@@ -1145,6 +1149,7 @@
     context.restore();
   }
 
+  // Bounce and Hop mode arenas.
   function drawBounceArena() {
     const wallWidth = 22 * gameScale();
     const floorHeight = 12 * gameScale();
@@ -1239,6 +1244,7 @@
     }
   }
 
+  // Hop mode course generation and collision checks.
   function ensureHopCourse() {
     const courseLimit = world.finishLine?.orientation === "vertical"
       ? world.finishLine.x - width * 0.65
@@ -1326,6 +1332,7 @@
     return true;
   }
 
+  // Bounce mode course generation and collision checks.
   function ensureBounceCourse() {
     const spacing = (world.levelMode ? 680 : 520) * gameScale();
     while (world.bounceNextHazardY > -height
@@ -1723,6 +1730,7 @@
     );
   }
 
+  // Castle mode movement and floor progression.
   function updateCastle(delta) {
     const castle = world.castle;
     if (castle.completing) {
@@ -1789,6 +1797,7 @@
     return true;
   }
 
+  // Shared game loop and per-mode updates.
   function update(delta) {
     world.elapsed += delta;
     const previousX = player.x;
@@ -2085,6 +2094,7 @@
     context.setLineDash([]);
   }
 
+  // Shared scene composition.
   function draw() {
     drawBackground();
     if (world.mode === "castle") drawCastleArena();
