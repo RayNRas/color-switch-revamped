@@ -1,17 +1,19 @@
 (() => {
   const canvas = document.getElementById("game-canvas");
   const context = canvas.getContext("2d");
+  const gameShell = document.querySelector(".game-shell");
   const overlay = document.getElementById("overlay");
   const panel = document.getElementById("panel");
   const hud = document.getElementById("hud");
   const scoreElement = document.getElementById("score");
-  const modeChip = document.getElementById("mode-chip");
+  const pauseButton = document.getElementById("pause-button");
   const controls = document.getElementById("controls");
   const musicTracks = {
     menu: "assets/fonts/Color%20Switch%20Soundtrack%20-%20Main%20Menu.mp3",
     classic: "assets/fonts/Color%20Switch%20Soundtrack%20-%20Main%20Menu.mp3",
     bounce: "assets/fonts/Color%20Switch%20Soundtrack%20-%20Bounce%20_%20Fidget%20Tap.mp3",
     hop: "assets/fonts/Color%20Switch%20Soundtrack%20-%20Hop%20Hop.mp3",
+    run: "assets/fonts/Color%20Switch%20Soundtrack%20-%20Hop%20Hop.mp3",
     slime: "assets/fonts/Color%20Switch%20Soundtrack%20-%20Line%20_%20Slime.mp3"
   };
   const backgroundMusic = new Audio();
@@ -137,7 +139,7 @@
     bounceNextHazardY: 0,
     bounceHazardIndex: 0,
     // Castle mode progression.
-    castle: { floorIndex: 0, completing: false, flagLowerProgress: 0 },
+    castle: { floorIndex: 0, completing: false, flagLowerProgress: 0, cameraOffset: 0 },
     // Hop mode course state.
     hopGroundY: 0,
     hopObstacles: [],
@@ -160,10 +162,12 @@
     mode: "classic",
     elapsed: 0,
     running: false,
+    paused: false,
     lastTime: 0,
     trailClock: 0
   };
-  const playableModes = new Set(["classic", "bounce", "hop", "slime", "castle"]);
+  const playableModes = new Set(["classic", "bounce", "hop", "slime", "castle", "run"]);
+  const runnerModes = new Set(["hop", "run"]);
   const player = {
     x: 0,
     y: 0,
@@ -226,7 +230,7 @@
   }
 
   function castleFloorY(floorIndex) {
-    return height * (0.82 - floorIndex * 0.135);
+    return height * (0.82 - floorIndex * 0.135) + world.castle.cameraOffset;
   }
 
   function castleFlagX() {
@@ -321,7 +325,7 @@
     canvas.height = Math.round(height * pixelRatio);
     context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
     player.radius = 11 * gameScale();
-    player.x = world.running && world.mode === "hop"
+    player.x = world.running && runnerModes.has(world.mode)
       ? width * 0.26
       : world.running && world.mode === "castle"
       ? castleLeftWall() + player.radius
@@ -339,14 +343,21 @@
     for (const item of [...world.stars, ...world.pickups]) item.x = width / 2;
   }
 
+  function setFullscreenGameplay(enabled) {
+    const changed = gameShell.classList.contains("fullscreen-gameplay") !== enabled;
+    gameShell.classList.toggle("fullscreen-gameplay", enabled);
+    if (changed) setCanvasSize();
+  }
+
   // Screen: main menu.
   function showMenu() {
     world.running = false;
+    world.paused = false;
+    setFullscreenGameplay(false);
     setBackgroundMusic("menu");
     panel.className = "panel main-menu";
     controls.setAttribute("aria-label", "Jump controls");
     controls.classList.remove("castle-controls");
-    hud.classList.remove("castle-hud");
     document.getElementById("jump-button").textContent = "TAP TO BOUNCE";
     document.getElementById("jump-button").setAttribute("aria-label", "Jump");
     controls.querySelector(".hint").textContent = "Tap, click, or press SPACE";
@@ -354,7 +365,21 @@
     controls.classList.remove("visible");
     overlay.classList.remove("hidden");
     panel.innerHTML = `
-      <h1 class="home-brand"><span class="home-brand-color">C<span class="home-brand-o clockwise">O</span>L<span class="home-brand-o counterclockwise">O</span>R</span><span class="home-brand-switch">SWITCH</span><small>REVAMPED</small></h1>
+      <header class="home-header">
+        <button class="home-utility-button home-utility-settings" data-home-info="settings" aria-label="Settings">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.4 13a7.8 7.8 0 0 0 0-2l2-1.6-2-3.5-2.4 1a7 7 0 0 0-1.7-1L15 3h-4l-.4 2.9a7 7 0 0 0-1.7 1l-2.4-1-2 3.5 2 1.6a7.8 7.8 0 0 0 0 2l-2 1.6 2 3.5 2.4-1a7 7 0 0 0 1.7 1L11 22h4l.4-2.9a7 7 0 0 0 1.7-1l2.4 1 2-3.5zM13 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7"/></svg>
+        </button>
+        <button class="home-utility-button home-utility-help" data-home-info="help" aria-label="Help">?</button>
+        <button class="home-utility-button home-utility-calendar" data-home-info="daily rewards" aria-label="Daily rewards">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 2h2v3h6V2h2v3h3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h3zm13 9H4v10h16zM6 13h4v3H6zm6 0h4v3h-4z"/></svg>
+        </button>
+        <h1 class="home-brand"><span class="home-brand-color">C<span class="home-brand-o clockwise">O</span>L<span class="home-brand-o counterclockwise">O</span>R</span><span class="home-brand-switch">SWITCH</span><small>REVAMPED</small></h1>
+        <button class="home-utility-button home-utility-gift" data-home-info="rewards" aria-label="Rewards">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7h-1.2A3.5 3.5 0 0 0 13 3.2L12 4.4l-1-1.2A3.5 3.5 0 0 0 5.2 7H4a2 2 0 0 0-2 2v3h9V9h2v3h9V9a2 2 0 0 0-2-2M7.5 5a1.5 1.5 0 0 1 2.3-1.3L12 6.5H7.5A1.5 1.5 0 0 1 7.5 5m9 0A1.5 1.5 0 0 1 15 6.5h-3l2.2-2.8A1.5 1.5 0 0 1 16.5 5M3 14h8v8H5a2 2 0 0 1-2-2zm10 0h8v6a2 2 0 0 1-2 2h-6z"/></svg>
+        </button>
+        <button class="home-utility-button home-utility-endless" data-home-endless aria-label="Endless classic" title="Endless classic">∞</button>
+        <button class="home-utility-button home-utility-no-ads" data-home-info="no ads" aria-label="No ads">NO<br>ADS</button>
+      </header>
       <div class="home-play-stack">
         <span class="home-ring outer" aria-hidden="true"></span>
         <span class="home-ring middle" aria-hidden="true"></span>
@@ -364,9 +389,9 @@
       </div>
       <div class="home-menu-actions">
         <div class="home-modes-banner">
-          <span class="home-banner-star" aria-hidden="true"><svg viewBox="0 0 36 36"><path d="M 16.12 4.61 Q 18 0 19.88 4.61 L 20.82 6.92 Q 22.7 11.53 27.67 11.89 L 30.15 12.07 Q 35.12 12.44 31.31 15.65 L 29.41 17.26 Q 25.61 20.47 26.8 25.31 L 27.39 27.73 Q 28.58 32.56 24.35 29.94 L 22.23 28.62 Q 18 26 13.77 28.62 L 11.65 29.94 Q 7.42 32.56 8.61 27.73 L 9.2 25.31 Q 10.39 20.47 6.59 17.26 L 4.69 15.65 Q .88 12.44 5.85 12.07 L 8.33 11.89 Q 13.3 11.53 15.18 6.92 Z"/></svg></span>
-          <button class="action-button home-modes-button" data-action="modes">GAME MODES</button>
-          <span class="home-banner-star" aria-hidden="true"><svg viewBox="0 0 36 36"><path d="M 16.12 4.61 Q 18 0 19.88 4.61 L 20.82 6.92 Q 22.7 11.53 27.67 11.89 L 30.15 12.07 Q 35.12 12.44 31.31 15.65 L 29.41 17.26 Q 25.61 20.47 26.8 25.31 L 27.39 27.73 Q 28.58 32.56 24.35 29.94 L 22.23 28.62 Q 18 26 13.77 28.62 L 11.65 29.94 Q 7.42 32.56 8.61 27.73 L 9.2 25.31 Q 10.39 20.47 6.59 17.26 L 4.69 15.65 Q .88 12.44 5.85 12.07 L 8.33 11.89 Q 13.3 11.53 15.18 6.92 Z"/></svg></span>
+          <span class="home-banner-arrow" aria-hidden="true"><svg viewBox="0 0 32 24"><path d="M0 7h17V0l15 12-15 12v-7H0z"/></svg></span>
+          <button class="action-button home-modes-button" data-action="modes" aria-label="Browse arcade modes">ARCADE</button>
+          <span class="home-banner-arrow" aria-hidden="true"><svg viewBox="0 0 32 24"><path d="M32 7H15V0L0 12l15 12v-7h17z"/></svg></span>
         </div>
         <nav class="home-mode-links" aria-label="Quick mode selection">
           <button class="home-mode-button" data-home-mode="classic" aria-label="Classic" title="Classic"><span class="home-mode-icon" style="--mode-color:#35bd52"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M9 5h14v5a7 7 0 0 1-5.5 6.84V21h4v4H10v-4h4v-4.16A7 7 0 0 1 9 10V5z"/><path d="M9 7H5v3a6 6 0 0 0 5 5.92M23 7h4v3a6 6 0 0 1-5 5.92" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><path d="M8 27h16v2H8z"/></svg></span></button>
@@ -379,6 +404,10 @@
     `;
     panel.querySelector('[data-action="start-classic"]').addEventListener("click", () => startGame("classic"));
     panel.querySelector('[data-action="modes"]').addEventListener("click", showModes);
+    panel.querySelector("[data-home-endless]").addEventListener("click", () => startGame("classic"));
+    panel.querySelectorAll("[data-home-info]").forEach((button) => {
+      button.addEventListener("click", () => showWipMode(button.dataset.homeInfo, false));
+    });
     panel.querySelectorAll("[data-home-mode]").forEach((button) => {
       button.addEventListener("click", () => showLevelSelect(button.dataset.homeMode));
     });
@@ -387,6 +416,7 @@
 
   // Screen: mode browser.
   function showModes() {
+    setFullscreenGameplay(false);
     setBackgroundMusic("menu");
     const modeRows = [
       ...featuredModes,
@@ -445,6 +475,7 @@
 
   // Screen: level selection.
   function showLevelSelect(modeName) {
+    setFullscreenGameplay(false);
     setBackgroundMusic("menu");
     const modeTitle = modeName[0].toUpperCase() + modeName.slice(1);
     const endlessAvailable = endlessModeEnabled.get(modeName) === true;
@@ -489,6 +520,7 @@
 
   function showGameOver() {
     world.running = false;
+    world.paused = false;
     setBackgroundMusic("menu");
     panel.className = "panel";
     hud.classList.remove("visible");
@@ -507,8 +539,44 @@
     panel.querySelector('[data-action="menu"]').addEventListener("click", showMenu);
   }
 
+  function pauseGame() {
+    if (!world.running) return;
+    world.running = false;
+    world.paused = true;
+    backgroundMusic.pause();
+    controls.classList.remove("visible");
+    panel.className = "panel";
+    panel.innerHTML = `
+      <p class="eyebrow">${world.mode[0].toUpperCase() + world.mode.slice(1)}${world.levelMode ? " · Level 1" : ""}</p>
+      <h1>PAUSED</h1>
+      <div class="button-stack">
+        <button class="action-button" data-action="resume">RESUME</button>
+        <button class="action-button secondary" data-action="restart">RESTART</button>
+        <button class="mode-back" data-action="menu">MAIN MENU</button>
+      </div>
+    `;
+    panel.querySelector('[data-action="resume"]').addEventListener("click", resumeGame);
+    panel.querySelector('[data-action="restart"]').addEventListener("click", () => startGame(world.mode, world.levelMode));
+    panel.querySelector('[data-action="menu"]').addEventListener("click", showMenu);
+    overlay.classList.remove("hidden");
+    panel.querySelector('[data-action="resume"]').focus();
+  }
+
+  function resumeGame() {
+    if (!world.paused) return;
+    world.paused = false;
+    world.running = true;
+    world.lastTime = performance.now();
+    setBackgroundMusicForMode(world.mode);
+    overlay.classList.add("hidden");
+    controls.classList.add("visible");
+    pauseButton.focus();
+    requestAnimationFrame(gameFrame);
+  }
+
   function showLevelComplete() {
     world.running = false;
+    world.paused = false;
     setBackgroundMusic("menu");
     panel.className = "panel";
     hud.classList.remove("visible");
@@ -601,6 +669,7 @@
     panel.className = "panel";
     world.mode = mode;
     world.levelMode = levelMode;
+    setFullscreenGameplay(true);
     world.finishLine = null;
     world.rings = [];
     world.stars = [];
@@ -611,8 +680,9 @@
     world.score = 0;
     world.elapsed = 0;
     world.running = true;
+    world.paused = false;
     world.lastTime = performance.now();
-    world.castle = { floorIndex: 0, completing: false, flagLowerProgress: 0 };
+    world.castle = { floorIndex: 0, completing: false, flagLowerProgress: 0, cameraOffset: 0 };
     player.x = mode === "castle" ? castleLeftWall() + player.radius : width / 2;
     world.bounceFloorY = height * 0.78;
     world.bounceDirection = 1;
@@ -660,7 +730,7 @@
     player.hopSlammed = false;
     player.hopPlatform = null;
     player.rotation = 0;
-    if (mode === "hop") {
+    if (runnerModes.has(mode)) {
       player.x = width * 0.26;
       player.y = world.hopGroundY - player.radius;
       player.grounded = true;
@@ -676,7 +746,7 @@
     }
     if (levelMode && mode !== "castle") {
       const verticalDistance = height * (mode === "slime" ? 3.6 : mode === "bounce" ? 3.8 : 4.4);
-      world.finishLine = mode === "hop"
+      world.finishLine = runnerModes.has(mode)
         ? { orientation: "vertical", x: player.x + width * 6, y: null, thickness: 28 * gameScale() }
         : { orientation: "horizontal", x: null, y: height * 0.43 - verticalDistance, thickness: 28 * gameScale() };
     }
@@ -692,17 +762,15 @@
       world.pickups[0].collected = true;
     }
     scoreElement.textContent = "0";
-    scoreElement.parentElement.querySelector(".score-label").textContent = "Stars collected";
-    const modeTitle = mode[0].toUpperCase() + mode.slice(1);
-    modeChip.textContent = levelMode ? `${modeTitle} · Level 1` : mode === "classic" ? "Classic ∞" : `${modeTitle} ∞`;
-    controls.setAttribute("aria-label", mode === "slime" ? "Slime aiming controls" : mode === "bounce" ? "Bounce controls" : mode === "hop" ? "Hop controls" : mode === "castle" ? "Castle controls" : "Jump controls");
+    controls.setAttribute("aria-label", mode === "slime" ? "Slime aiming controls" : mode === "bounce" ? "Bounce controls" : mode === "hop" ? "Hop controls" : mode === "run" ? "Run controls" : mode === "castle" ? "Castle controls" : "Jump controls");
     controls.classList.toggle("castle-controls", mode === "castle");
-    hud.classList.toggle("castle-hud", mode === "castle");
     const jumpButton = document.getElementById("jump-button");
-    jumpButton.textContent = mode === "slime" ? "AIM & LEAP" : mode === "hop" ? "TAP TO JUMP / SLAM" : mode === "bounce" || mode === "castle" ? "TAP TO JUMP" : "TAP TO BOUNCE";
+    jumpButton.textContent = mode === "slime" ? "AIM & LEAP" : mode === "hop" ? "TAP TO JUMP / SLAM" : mode === "run" || mode === "bounce" || mode === "castle" ? "TAP TO JUMP" : "TAP TO BOUNCE";
     jumpButton.setAttribute("aria-label", "Jump");
     controls.querySelector(".hint").textContent = mode === "slime"
       ? "Aim and launch · Space to shoot"
+      : mode === "run"
+      ? "Auto-run · tap to jump over obstacles"
       : mode === "hop"
       ? "Auto-roll · tap to leap, tap again to slam"
       : mode === "bounce"
@@ -710,8 +778,7 @@
       : mode === "castle"
       ? "Roll across each floor · tap to leap over spikes"
       : "Tap, click, or press SPACE";
-    if (mode === "hop") scoreElement.parentElement.querySelector(".score-label").textContent = "Stars collected";
-    if (mode === "hop") {
+    if (runnerModes.has(mode)) {
       world.stars = [];
       ensureHopCourse();
     }
@@ -780,7 +847,8 @@
       player.grounded = false;
       player.coyoteTime = 0;
     }
-    if (world.mode === "hop") {
+    if (runnerModes.has(world.mode)) {
+      if (world.mode === "run" && !player.grounded) return;
       if (player.grounded) {
         player.velocity = hopJumpVelocity * gameScale();
         player.grounded = false;
@@ -804,6 +872,13 @@
 
   // Gameplay input and mode-specific arenas.
   function handleInput(event) {
+    if (event.code === "Escape") {
+      event.preventDefault();
+      if (world.running) pauseGame();
+      else if (world.paused) resumeGame();
+      return;
+    }
+    if (world.paused) return;
     if (world.running && world.mode === "slime") {
       if (event.code === "ArrowUp" || event.code === "ArrowDown") {
         event.preventDefault();
@@ -1539,7 +1614,7 @@
     context.beginPath();
     context.arc(x, y, radius, 0, Math.PI * 2);
     context.fill();
-    if (world.mode === "hop") {
+    if (runnerModes.has(world.mode)) {
       context.save();
       context.translate(x, y);
       context.rotate(rotation);
@@ -1558,7 +1633,7 @@
   }
 
   function drawPlayerTrail() {
-    const lifetime = world.mode === "hop" ? hopTrailLifetime : trailLifetime;
+    const lifetime = runnerModes.has(world.mode) ? hopTrailLifetime : trailLifetime;
     for (const echo of world.trail) {
       const progress = echo.age / lifetime;
       context.globalAlpha = (1 - progress) * 0.42;
@@ -1702,13 +1777,20 @@
   }
 
   function keepWorldInView() {
-    if (world.mode === "hop") return;
-    const followLine = height * 0.43;
+    const followLine = height / 2;
     if (player.y >= followLine) return;
     const shift = followLine - player.y;
     player.y = followLine;
     for (const item of [...world.rings, ...world.stars, ...world.pickups, ...world.trail]) item.y += shift;
     if (world.finishLine?.orientation === "horizontal") world.finishLine.y += shift;
+    if (runnerModes.has(world.mode)) {
+      world.hopGroundY += shift;
+      for (const saw of world.hopSaws) saw.y += shift;
+      for (const platform of world.hopPlatforms) {
+        platform.y += shift;
+        platform.baseY += shift;
+      }
+    }
     if (world.mode === "bounce") {
       world.bounceFloorY += shift;
       world.bounceNextHazardY += shift;
@@ -1728,6 +1810,7 @@
       world.slimeSaws = world.slimeSaws.filter((saw) => saw.y < height + saw.radius);
       world.slimeDistance += shift;
     }
+    if (world.mode === "castle") world.castle.cameraOffset += shift;
     if (world.spawnPlatform?.active) world.spawnPlatform.y += shift;
   }
 
@@ -1817,7 +1900,7 @@
     const previousY = player.y;
     if (world.mode === "castle") {
       if (!updateCastle(delta)) return false;
-    } else if (world.mode === "hop") {
+    } else if (runnerModes.has(world.mode)) {
       const difficulty = hopDifficulty();
       const travel = hopSpeed * (1 + difficulty * 0.35) * gameScale() * delta;
       world.hopDistance += travel;
@@ -1997,7 +2080,7 @@
     const hangingOnBounceWall = world.mode === "bounce"
       && player.wallSide !== null
       && player.wallHangRemaining > 0;
-    if (world.mode !== "hop" && world.mode !== "slime" && world.mode !== "castle" && !hangingOnBounceWall && !(world.mode === "bounce" && player.wallSide !== null)) {
+    if (!runnerModes.has(world.mode) && world.mode !== "slime" && world.mode !== "castle" && !hangingOnBounceWall && !(world.mode === "bounce" && player.wallSide !== null)) {
       player.velocity += (world.mode === "bounce" ? bounceGravity : gravity) * gameScale() * delta;
       player.y += player.velocity * delta;
     }
@@ -2034,10 +2117,10 @@
     }
     world.trail = world.trail.filter((echo) => {
       echo.age += delta;
-      return echo.age < (world.mode === "hop" ? hopTrailLifetime : trailLifetime);
+      return echo.age < (runnerModes.has(world.mode) ? hopTrailLifetime : trailLifetime);
     });
     if (!checkRingContacts(previousX, previousY)) return false;
-    if (world.mode !== "castle") keepWorldInView();
+    keepWorldInView();
     world.trailClock += delta;
     if (world.trailClock >= 0.035) {
       world.trailClock %= 0.035;
@@ -2118,7 +2201,7 @@
     world.stars.forEach(drawStar);
     world.pickups.forEach(drawPickup);
     world.rings.forEach(drawRing);
-    if (world.mode === "hop") drawHopArena();
+    if (runnerModes.has(world.mode)) drawHopArena();
     drawPlayerTrail();
     drawSlimeAim();
     drawPlayer();
@@ -2160,6 +2243,7 @@
     event.preventDefault();
     jump();
   });
+  pauseButton.addEventListener("click", pauseGame);
   document.addEventListener("keydown", handleInput);
   window.addEventListener("resize", setCanvasSize);
   setCanvasSize();

@@ -49,6 +49,15 @@
       box-shadow: none;
     }
 
+    .game-shell.fullscreen-gameplay {
+      width: 100vw;
+      height: 100dvh;
+      max-height: none;
+      aspect-ratio: auto;
+      border: 0;
+      border-radius: 0;
+    }
+
     canvas {
       position: absolute;
       inset: 0;
@@ -59,47 +68,64 @@
     .hud {
       position: absolute;
       z-index: 1;
-      inset: max(22px, env(safe-area-inset-top)) 22px auto;
+      inset: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) auto max(16px, env(safe-area-inset-left));
       display: flex;
       justify-content: space-between;
-      align-items: flex-start;
+      align-items: center;
       pointer-events: none;
       opacity: 0;
       transition: opacity .2s ease;
     }
 
     .hud.visible { opacity: 1; }
-    .hud.castle-hud { inset: max(8px, env(safe-area-inset-top)) 12px auto; align-items: center; }
-    .castle-hud .score-label { display: none; }
-    .castle-hud .score-value { margin: 0; font-size: 19px; }
-    .castle-hud .mode-chip { padding: 5px 7px; font-size: 8px; }
+    .hud > * { pointer-events: auto; }
 
-    .score-label {
-      color: #aaa7b0;
-      font-size: 11px;
-      font-weight: 800;
-      letter-spacing: .19em;
-      text-transform: uppercase;
+    .score-display {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      min-height: 44px;
+      padding: 0 13px;
+      border: 1px solid rgba(255,255,255,.16);
+      border-radius: 24px;
+      background: rgba(39,39,39,.82);
     }
 
     .score-value {
-      margin-top: 3px;
-      font-size: 32px;
+      margin: 0;
+      font-size: 23px;
       font-weight: 800;
       line-height: 1;
       font-variant-numeric: tabular-nums;
     }
 
-    .mode-chip {
-      padding: 8px 11px;
+    .score-star {
+      width: 22px;
+      height: 22px;
+      fill: #FFE80F;
+    }
+
+    .pause-button {
+      display: grid;
+      width: 44px;
+      height: 44px;
+      place-items: center;
       border: 1px solid rgba(255,255,255,.14);
-      border-radius: 5px;
-      background: #323137;
-      color: #FFE80F;
-      font-size: 10px;
-      font-weight: 800;
-      letter-spacing: .12em;
-      text-transform: uppercase;
+      border-radius: 50%;
+      background: rgba(39,39,39,.82);
+      color: #fff;
+      cursor: pointer;
+    }
+
+    .pause-button svg {
+      width: 20px;
+      height: 20px;
+      fill: currentColor;
+    }
+
+    .pause-button:focus-visible {
+      outline: 2px solid #32E2F1;
+      outline-offset: 3px;
     }
 
     .overlay {
@@ -137,27 +163,78 @@
       align-items: center;
       justify-content: center;
       margin-inline: auto;
-      gap: clamp(6px, 1.5cqw, 12px);
+      gap: clamp(14px, 3.2cqw, 20px);
       text-align: center;
       transform: none;
     }
 
-    .home-brand {
-      position: relative;
+    .home-header {
+      display: grid;
+      width: 92%;
+      grid-template-areas:
+        "settings . help"
+        "calendar brand gift"
+        "endless brand no-ads";
+      grid-template-columns: minmax(30px, 1fr) minmax(0, 5fr) minmax(30px, 1fr);
+      grid-template-rows: repeat(3, clamp(27px, 9cqw, 40px));
+      row-gap: clamp(7px, 2cqw, 10px);
+      align-items: center;
+      justify-items: center;
       align-self: center;
+    }
+
+    .home-brand {
+      grid-area: brand;
+      justify-self: center;
       margin: 0;
       font-family: "Blissful Thinking", "Segoe Print", "Comic Sans MS", cursive;
-      font-size: clamp(30px, 15cqw, 56px);
+      font-size: clamp(24px, 13cqw, 56px);
       font-weight: 800;
       letter-spacing: .025em;
       line-height: .86;
       text-align: center;
+      white-space: nowrap;
     }
 
     .home-brand span {
       display: block;
       color: #f3f1f5;
     }
+
+    .home-utility-button {
+      display: grid;
+      width: clamp(26px, 9cqw, 40px);
+      height: clamp(26px, 9cqw, 40px);
+      min-width: 0;
+      min-height: 0;
+      aspect-ratio: 1;
+      place-items: center;
+      padding: 5px;
+      border: 0;
+      border-radius: 50%;
+      background: rgba(255,255,255,.16);
+      color: #fff;
+      cursor: pointer;
+    }
+
+    .home-utility-button svg {
+      display: block;
+      width: 100%;
+      height: 100%;
+      fill: currentColor;
+    }
+
+    .home-utility-button:focus-visible {
+      outline: 2px solid #fff;
+      outline-offset: 3px;
+    }
+
+    .home-utility-settings { grid-area: settings; }
+    .home-utility-help { grid-area: help; font-family: Arial, sans-serif; font-size: 19px; font-weight: 900; }
+    .home-utility-calendar { grid-area: calendar; }
+    .home-utility-gift { grid-area: gift; }
+    .home-utility-endless { grid-area: endless; font-family: Arial, sans-serif; font-size: 24px; }
+    .home-utility-no-ads { grid-area: no-ads; font-size: 9px; font-weight: 900; line-height: 1; }
 
     @property --logo-o-angle {
       syntax: "<angle>";
@@ -198,9 +275,10 @@
       color: #f3f1f5;
       font-size: .48em;
       font-weight: 800;
-      letter-spacing: .24em;
+      letter-spacing: .345em;
       line-height: 1;
       text-align: center;
+      transform: translateX(.17em);
     }
 
     .home-play-stack {
@@ -210,6 +288,7 @@
       aspect-ratio: 1;
       align-self: center;
       place-items: center;
+      transform: translateY(clamp(10px, 4cqw, 18px));
     }
 
     @property --home-ring-angle {
@@ -263,7 +342,7 @@
       transform: translate(-50%, -50%);
     }
 
-    .home-play-button svg { display: block; width: 64%; height: 64%; }
+    .home-play-button svg { display: block; width: 78%; height: 78%; }
 
     .home-play-button:focus-visible,
     .home-mode-button:focus-visible {
@@ -286,6 +365,20 @@
       place-items: center;
     }
 
+    .home-banner-arrow {
+      display: grid;
+      flex: 0 0 9%;
+      place-items: center;
+      color: #fff;
+    }
+
+    .home-banner-arrow svg {
+      display: block;
+      width: min(8cqw, 30px);
+      height: auto;
+      fill: currentColor;
+    }
+
     .home-banner-star svg {
       display: block;
       width: min(7cqw, 27px);
@@ -303,7 +396,7 @@
 
     .action-button.home-modes-button {
       position: relative;
-      width: 76%;
+      width: 62%;
       height: 100%;
       min-height: 0;
       padding: 0 4%;
@@ -346,7 +439,8 @@
       flex-direction: column;
       align-items: center;
       align-self: center;
-      gap: clamp(6px, 1.5cqw, 12px);
+      gap: clamp(10px, 2.4cqw, 16px);
+      transform: translateY(clamp(10px, 4cqw, 18px));
     }
 
     .home-mode-links {
@@ -944,12 +1038,14 @@
 <body>
   <main class="game-shell" aria-label="Color Switch: Revamped arcade game">
     <canvas id="game-canvas" aria-label="Game field"></canvas>
-    <section class="hud" id="hud" aria-live="polite">
-      <div>
-        <div class="score-label">Stars collected</div>
-        <div class="score-value" id="score">0</div>
+    <section class="hud" id="hud" aria-label="Game status">
+      <div class="score-display" aria-label="Stars collected">
+        <svg class="score-star" viewBox="0 0 24 24" aria-hidden="true"><path d="m12 1.8 3.1 6.3 7 1-5.05 4.93 1.2 6.97L12 17.7l-6.25 3.3 1.2-6.97L1.9 9.1l7-1L12 1.8z"/></svg>
+        <span class="score-value" id="score" aria-live="polite">0</span>
       </div>
-      <div class="mode-chip" id="mode-chip">Endless</div>
+      <button class="pause-button" id="pause-button" aria-label="Pause game" title="Pause game">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4h4v16H6zm8 0h4v16h-4z"/></svg>
+      </button>
     </section>
     <section class="overlay" id="overlay">
       <div class="panel" id="panel"></div>
