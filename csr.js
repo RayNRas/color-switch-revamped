@@ -7,6 +7,7 @@
   const hud = document.getElementById("hud");
   const scoreElement = document.getElementById("score");
   const pauseButton = document.getElementById("pause-button");
+  const fullscreenButton = document.getElementById("fullscreen-button");
   const controls = document.getElementById("controls");
   const musicTracks = {
     menu: "assets/fonts/Color%20Switch%20Soundtrack%20-%20Main%20Menu.mp3",
@@ -14,6 +15,8 @@
     bounce: "assets/fonts/Color%20Switch%20Soundtrack%20-%20Bounce%20_%20Fidget%20Tap.mp3",
     hop: "assets/fonts/Color%20Switch%20Soundtrack%20-%20Hop%20Hop.mp3",
     run: "assets/fonts/Color%20Switch%20Soundtrack%20-%20Hop%20Hop.mp3",
+    kite: "assets/fonts/Color%20Switch%20Soundtrack%20-%20Hop%20Hop.mp3",
+    castle: "assets/fonts/Color%20Switch%20Soundtrack%20-%20Tower%20_%20Fidget%20Spinner%20_%20PIxel.mp3",
     slime: "assets/fonts/Color%20Switch%20Soundtrack%20-%20Line%20_%20Slime.mp3"
   };
   const backgroundMusic = new Audio();
@@ -22,6 +25,8 @@
   backgroundMusic.preload = "auto";
   backgroundMusic.volume = 0.3;
   let currentMusicTrack = "";
+  let requestedMusicTrack = "";
+  let musicTransitionId = 0;
   const jumpSound = new Audio("assets/fonts/jump.wav");
   jumpSound.preload = "auto";
   jumpSound.volume = 0.24;
@@ -140,6 +145,7 @@
     bounceHazardIndex: 0,
     // Castle mode progression.
     castle: { floorIndex: 0, completing: false, flagLowerProgress: 0, cameraOffset: 0 },
+    kite: { waterY: 0, liftHeld: false, clouds: [], nextStarX: 0 },
     // Hop mode course state.
     hopGroundY: 0,
     hopObstacles: [],
@@ -166,7 +172,7 @@
     lastTime: 0,
     trailClock: 0
   };
-  const playableModes = new Set(["classic", "bounce", "hop", "slime", "castle", "run"]);
+  const playableModes = new Set(["classic", "bounce", "hop", "slime", "castle", "run", "kite"]);
   const runnerModes = new Set(["hop", "run"]);
   const player = {
     x: 0,
@@ -204,12 +210,18 @@
   const coyoteDuration = 0.13;
   // Castle mode course layout.
   const castleHazardLayouts = [[0.35, 0.67], [0.48], [0.32, 0.67], [0.45, 0.72], []];
+  const castleSpikeHeight = 8;
   // Hop mode physics.
   const hopSpeed = 185;
   const hopTrailLifetime = 0.42;
   const hopJumpVelocity = -430;
   const hopGravity = 360;
   const hopSlamSpeed = 1050;
+  const kiteWindSpeed = 155;
+  const kiteLiftAcceleration = 540;
+  const kiteGravity = 190;
+  const kiteRiseSpeed = 190;
+  const kiteFallSpeed = 105;
   // Slime mode physics.
   const slimeGravity = 820;
   const shapeTypes = ["circle", "triangle", "square", "hexagon"];
@@ -221,12 +233,16 @@
     return Math.min(width / 460, 1);
   }
 
+  function castleWallWidth() {
+    return 12 * gameScale();
+  }
+
   function castleLeftWall() {
-    return width * 0.18;
+    return castleWallWidth();
   }
 
   function castleRightWall() {
-    return width * 0.82;
+    return width - castleWallWidth();
   }
 
   function castleFloorY(floorIndex) {
@@ -253,17 +269,65 @@
 
   function setBackgroundMusic(track) {
     const source = musicTracks[track];
-    if (currentMusicTrack !== track) {
+    if (requestedMusicTrack === track && !backgroundMusic.paused) return;
+    const sameSource = currentMusicTrack && musicTracks[currentMusicTrack] === source;
+    requestedMusicTrack = track;
+    if (sameSource && !backgroundMusic.paused) {
+      const transitionId = ++musicTransitionId;
       currentMusicTrack = track;
-      backgroundMusic.src = source;
-      backgroundMusic.load();
+      const startVolume = backgroundMusic.volume;
+      const startedAt = performance.now();
+      const restoreVolume = (time) => {
+        if (transitionId !== musicTransitionId) return;
+        const progress = Math.min(1, (time - startedAt) / 300);
+        backgroundMusic.volume = startVolume + (0.3 - startVolume) * progress;
+        if (progress < 1) requestAnimationFrame(restoreVolume);
+      };
+      requestAnimationFrame(restoreVolume);
+      return;
     }
-    if (backgroundMusic.paused) {
-      backgroundMusic.play().catch((error) => {
-        if (currentMusicTrack === track && error.name !== "NotAllowedError") {
+
+    const transitionId = ++musicTransitionId;
+    const playRequestedTrack = () => {
+      if (transitionId !== musicTransitionId) return;
+      currentMusicTrack = track;
+      if (!sameSource) {
+        backgroundMusic.src = source;
+        backgroundMusic.load();
+      }
+      backgroundMusic.volume = 0;
+      backgroundMusic.play().then(() => {
+        const startedAt = performance.now();
+        const fadeIn = (time) => {
+          if (transitionId !== musicTransitionId) return;
+          const progress = Math.min(1, (time - startedAt) / 450);
+          backgroundMusic.volume = 0.3 * progress;
+          if (progress < 1) requestAnimationFrame(fadeIn);
+        };
+        requestAnimationFrame(fadeIn);
+      }).catch((error) => {
+        if (transitionId === musicTransitionId && error.name !== "NotAllowedError") {
           console.error(`Could not play the ${track} soundtrack`, error);
         }
       });
+    };
+
+    if (!sameSource && currentMusicTrack && !backgroundMusic.paused) {
+      const startVolume = backgroundMusic.volume;
+      const startedAt = performance.now();
+      const fadeOut = (time) => {
+        if (transitionId !== musicTransitionId) return;
+        const progress = Math.min(1, (time - startedAt) / 350);
+        backgroundMusic.volume = startVolume * (1 - progress);
+        if (progress < 1) {
+          requestAnimationFrame(fadeOut);
+          return;
+        }
+        playRequestedTrack();
+      };
+      requestAnimationFrame(fadeOut);
+    } else {
+      playRequestedTrack();
     }
   }
 
@@ -343,17 +407,42 @@
     for (const item of [...world.stars, ...world.pickups]) item.x = width / 2;
   }
 
+  function updateFullscreenButton() {
+    const isFullscreen = document.fullscreenElement === document.documentElement;
+    const label = isFullscreen ? "Exit fullscreen" : "Enter fullscreen";
+    fullscreenButton.setAttribute("aria-label", label);
+    fullscreenButton.setAttribute("aria-pressed", String(isFullscreen));
+    fullscreenButton.title = label;
+    fullscreenButton.innerHTML = isFullscreen
+      ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 8h3V5h2v5H5zm9-3h2v3h3v2h-5zM5 14h5v5H8v-3H5zm9 0h5v2h-3v3h-2z"/></svg>'
+      : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h6v2H6v4H4zm10 0h6v6h-2V6h-4zM4 14h2v4h4v2H4zm14 0h2v6h-6v-2h4z"/></svg>';
+  }
+
   function setFullscreenGameplay(enabled) {
     const changed = gameShell.classList.contains("fullscreen-gameplay") !== enabled;
     gameShell.classList.toggle("fullscreen-gameplay", enabled);
     if (changed) setCanvasSize();
   }
 
+  async function toggleFullscreen() {
+    try {
+      if (document.fullscreenElement === document.documentElement) {
+        await document.exitFullscreen();
+      } else if (document.documentElement.requestFullscreen) {
+        await document.documentElement.requestFullscreen();
+      }
+    } catch (error) {
+      console.error("Could not toggle fullscreen", error);
+    }
+  }
+
   // Screen: main menu.
   function showMenu() {
     world.running = false;
     world.paused = false;
+    world.kite.liftHeld = false;
     setFullscreenGameplay(false);
+    if (document.fullscreenElement === document.documentElement) document.exitFullscreen().catch((error) => console.error("Could not exit fullscreen", error));
     setBackgroundMusic("menu");
     panel.className = "panel main-menu";
     controls.setAttribute("aria-label", "Jump controls");
@@ -369,7 +458,7 @@
         <button class="home-utility-button home-utility-settings" data-home-info="settings" aria-label="Settings">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.4 13a7.8 7.8 0 0 0 0-2l2-1.6-2-3.5-2.4 1a7 7 0 0 0-1.7-1L15 3h-4l-.4 2.9a7 7 0 0 0-1.7 1l-2.4-1-2 3.5 2 1.6a7.8 7.8 0 0 0 0 2l-2 1.6 2 3.5 2.4-1a7 7 0 0 0 1.7 1L11 22h4l.4-2.9a7 7 0 0 0 1.7-1l2.4 1 2-3.5zM13 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7"/></svg>
         </button>
-        <button class="home-utility-button home-utility-help" data-home-info="help" aria-label="Help">?</button>
+        <button class="home-utility-button home-utility-help" data-home-info="help" aria-label="Help"><span class="home-utility-glyph">?</span></button>
         <button class="home-utility-button home-utility-calendar" data-home-info="daily rewards" aria-label="Daily rewards">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 2h2v3h6V2h2v3h3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h3zm13 9H4v10h16zM6 13h4v3H6zm6 0h4v3h-4z"/></svg>
         </button>
@@ -377,14 +466,14 @@
         <button class="home-utility-button home-utility-gift" data-home-info="rewards" aria-label="Rewards">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7h-1.2A3.5 3.5 0 0 0 13 3.2L12 4.4l-1-1.2A3.5 3.5 0 0 0 5.2 7H4a2 2 0 0 0-2 2v3h9V9h2v3h9V9a2 2 0 0 0-2-2M7.5 5a1.5 1.5 0 0 1 2.3-1.3L12 6.5H7.5A1.5 1.5 0 0 1 7.5 5m9 0A1.5 1.5 0 0 1 15 6.5h-3l2.2-2.8A1.5 1.5 0 0 1 16.5 5M3 14h8v8H5a2 2 0 0 1-2-2zm10 0h8v6a2 2 0 0 1-2 2h-6z"/></svg>
         </button>
-        <button class="home-utility-button home-utility-endless" data-home-endless aria-label="Endless classic" title="Endless classic">∞</button>
+        <button class="home-utility-button home-utility-endless" data-home-endless aria-label="Endless classic" title="Endless classic"><span class="home-utility-glyph">∞</span></button>
         <button class="home-utility-button home-utility-no-ads" data-home-info="no ads" aria-label="No ads">NO<br>ADS</button>
       </header>
       <div class="home-play-stack">
         <span class="home-ring outer" aria-hidden="true"></span>
         <span class="home-ring middle" aria-hidden="true"></span>
         <button class="home-play-button" data-action="start-classic" aria-label="Play Classic">
-          <svg viewBox="0 0 48 48" aria-hidden="true"><path fill="currentColor" transform="translate(-4.75 0)" d="M14 7.5Q14 4 17.2 6L42 22.2Q45 24 42 25.8L17.2 42Q14 44 14 40.5Z"/></svg>
+          <svg viewBox="0 0 48 48" aria-hidden="true"><path fill="currentColor" transform="translate(-2 0)" d="M14 7.5Q14 4 17.2 6L42 22.2Q45 24 42 25.8L17.2 42Q14 44 14 40.5Z"/></svg>
         </button>
       </div>
       <div class="home-menu-actions">
@@ -486,6 +575,8 @@
         <h1>CHOOSE<br><span class="title-accent">A RUN</span></h1>
         <p class="subtitle">${modeName === "castle"
           ? "Roll across each floor, leap over spikes, and reach the flag at the top."
+          : modeName === "kite"
+          ? "Hold to catch the lift, glide down on release, and stay above the water."
           : "Level 1 is a basic, easy course. Reach the finish line to complete it."}</p>
         <button class="action-button level-choice" data-start-level>
           <strong>LEVEL 1</strong><small>BASIC · EASY</small>
@@ -521,7 +612,7 @@
   function showGameOver() {
     world.running = false;
     world.paused = false;
-    setBackgroundMusic("menu");
+    world.kite.liftHeld = false;
     panel.className = "panel";
     hud.classList.remove("visible");
     controls.classList.remove("visible");
@@ -543,6 +634,7 @@
     if (!world.running) return;
     world.running = false;
     world.paused = true;
+    world.kite.liftHeld = false;
     backgroundMusic.pause();
     controls.classList.remove("visible");
     panel.className = "panel";
@@ -577,7 +669,6 @@
   function showLevelComplete() {
     world.running = false;
     world.paused = false;
-    setBackgroundMusic("menu");
     panel.className = "panel";
     hud.classList.remove("visible");
     controls.classList.remove("visible");
@@ -667,6 +758,7 @@
     unlockSoundEffects();
     setBackgroundMusicForMode(mode);
     panel.className = "panel";
+    world.running = false;
     world.mode = mode;
     world.levelMode = levelMode;
     setFullscreenGameplay(true);
@@ -683,6 +775,16 @@
     world.paused = false;
     world.lastTime = performance.now();
     world.castle = { floorIndex: 0, completing: false, flagLowerProgress: 0, cameraOffset: 0 };
+    world.kite = {
+      waterY: height * 0.88,
+      liftHeld: false,
+      clouds: Array.from({ length: 9 }, (_, index) => ({
+        x: Math.random() * width * 2 + index * width / 2,
+        y: height * (0.12 + Math.random() * 0.55),
+        size: (18 + Math.random() * 28) * gameScale()
+      })),
+      nextStarX: width * 1.1
+    };
     player.x = mode === "castle" ? castleLeftWall() + player.radius : width / 2;
     world.bounceFloorY = height * 0.78;
     world.bounceDirection = 1;
@@ -735,6 +837,13 @@
       player.y = world.hopGroundY - player.radius;
       player.grounded = true;
     }
+    if (mode === "kite") {
+      player.x = width * 0.28;
+      player.y = height * 0.4;
+      player.velocity = 0;
+      player.velocityX = kiteWindSpeed * gameScale();
+      ensureKiteCourse();
+    }
     if (mode === "slime") {
       world.bounceFloorY = height * 0.82;
       player.x = width / 2;
@@ -746,7 +855,9 @@
     }
     if (levelMode && mode !== "castle") {
       const verticalDistance = height * (mode === "slime" ? 3.6 : mode === "bounce" ? 3.8 : 4.4);
-      world.finishLine = runnerModes.has(mode)
+      world.finishLine = mode === "kite"
+        ? { orientation: "vertical", x: player.x + width * 8, y: null, thickness: 28 * gameScale() }
+        : runnerModes.has(mode)
         ? { orientation: "vertical", x: player.x + width * 6, y: null, thickness: 28 * gameScale() }
         : { orientation: "horizontal", x: null, y: height * 0.43 - verticalDistance, thickness: 28 * gameScale() };
     }
@@ -762,13 +873,15 @@
       world.pickups[0].collected = true;
     }
     scoreElement.textContent = "0";
-    controls.setAttribute("aria-label", mode === "slime" ? "Slime aiming controls" : mode === "bounce" ? "Bounce controls" : mode === "hop" ? "Hop controls" : mode === "run" ? "Run controls" : mode === "castle" ? "Castle controls" : "Jump controls");
+    controls.setAttribute("aria-label", mode === "kite" ? "Kite flight controls" : mode === "slime" ? "Slime aiming controls" : mode === "bounce" ? "Bounce controls" : mode === "hop" ? "Hop controls" : mode === "run" ? "Run controls" : mode === "castle" ? "Castle controls" : "Jump controls");
     controls.classList.toggle("castle-controls", mode === "castle");
     const jumpButton = document.getElementById("jump-button");
-    jumpButton.textContent = mode === "slime" ? "AIM & LEAP" : mode === "hop" ? "TAP TO JUMP / SLAM" : mode === "run" || mode === "bounce" || mode === "castle" ? "TAP TO JUMP" : "TAP TO BOUNCE";
-    jumpButton.setAttribute("aria-label", "Jump");
+    jumpButton.textContent = mode === "kite" ? "HOLD TO RISE" : mode === "slime" ? "AIM & LEAP" : mode === "hop" ? "TAP TO JUMP / SLAM" : mode === "run" || mode === "bounce" || mode === "castle" ? "TAP TO JUMP" : "TAP TO BOUNCE";
+    jumpButton.setAttribute("aria-label", mode === "kite" ? "Hold to rise" : "Jump");
     controls.querySelector(".hint").textContent = mode === "slime"
       ? "Aim and launch · Space to shoot"
+      : mode === "kite"
+      ? "Hold to climb · release to glide · wind pushes right"
       : mode === "run"
       ? "Auto-run · tap to jump over obstacles"
       : mode === "hop"
@@ -806,6 +919,10 @@
   function jump() {
     if (!world.running) return;
     unlockSoundEffects();
+    if (world.mode === "kite") {
+      world.kite.liftHeld = true;
+      return;
+    }
     if (world.mode === "castle") {
       if (world.castle.completing || !player.grounded) return;
       player.velocity = jumpVelocity * gameScale();
@@ -874,11 +991,21 @@
   function handleInput(event) {
     if (event.code === "Escape") {
       event.preventDefault();
+      if (document.fullscreenElement) {
+        document.exitFullscreen().catch((error) => console.error("Could not exit fullscreen", error));
+        return;
+      }
       if (world.running) pauseGame();
       else if (world.paused) resumeGame();
       return;
     }
     if (world.paused) return;
+    if (world.running && world.mode === "kite"
+      && (event.code === "Space" || event.code === "ArrowUp" || event.code === "KeyW")) {
+      event.preventDefault();
+      world.kite.liftHeld = true;
+      return;
+    }
     if (world.running && world.mode === "slime") {
       if (event.code === "ArrowUp" || event.code === "ArrowDown") {
         event.preventDefault();
@@ -896,9 +1023,119 @@
     }
   }
 
+  function releaseKiteLift(event) {
+    if (event.code && event.code !== "Space" && event.code !== "ArrowUp" && event.code !== "KeyW") return;
+    world.kite.liftHeld = false;
+  }
+
   function drawBackground() {
     context.fillStyle = "#272727";
     context.fillRect(0, 0, width, height);
+  }
+
+  function ensureKiteCourse() {
+    const finishX = world.finishLine?.orientation === "vertical" ? world.finishLine.x : Infinity;
+    while (world.kite.nextStarX < width * 2 && world.kite.nextStarX < finishX - width * 0.3) {
+      world.stars.push({
+        x: world.kite.nextStarX,
+        y: Math.min(
+          world.kite.waterY - 90 * gameScale(),
+          height * (0.2 + Math.random() * 0.43)
+        ),
+        collected: false,
+        rotation: 0,
+        pulse: Math.random() * Math.PI * 2
+      });
+      world.kite.nextStarX += width * (0.72 + Math.random() * 0.2);
+    }
+  }
+
+  function drawKiteArena() {
+    const sky = context.createLinearGradient(0, 0, 0, height);
+    sky.addColorStop(0, "#25364a");
+    sky.addColorStop(0.7, "#527c9b");
+    sky.addColorStop(1, "#82b3c5");
+    context.fillStyle = sky;
+    context.fillRect(0, 0, width, height);
+
+    context.save();
+    context.fillStyle = "rgba(255,255,255,.55)";
+    for (const cloud of world.kite.clouds) {
+      const { x, y, size } = cloud;
+      context.beginPath();
+      context.arc(x, y, size * 0.48, Math.PI * 0.55, Math.PI * 1.45);
+      context.arc(x + size * 0.48, y - size * 0.18, size * 0.55, Math.PI, 0);
+      context.arc(x + size, y, size * 0.4, Math.PI * 1.55, Math.PI * 0.45);
+      context.closePath();
+      context.fill();
+    }
+
+    context.strokeStyle = "rgba(255,255,255,.24)";
+    context.lineWidth = 2 * gameScale();
+    for (let i = 0; i < 7; i += 1) {
+      const y = height * (0.12 + i * 0.095);
+      const phase = (world.elapsed * (120 + i * 17) + i * width * 0.37) % (width + 130);
+      const x = width - phase;
+      context.beginPath();
+      context.moveTo(x, y);
+      context.lineTo(x + 54 * gameScale(), y);
+      context.stroke();
+    }
+    context.restore();
+
+    const waterY = world.kite.waterY;
+    context.fillStyle = "#164c69";
+    context.fillRect(0, waterY, width, height - waterY);
+    context.fillStyle = "#32E2F1";
+    context.fillRect(0, waterY, width, 3 * gameScale());
+    context.strokeStyle = "rgba(150,239,255,.58)";
+    context.lineWidth = 2 * gameScale();
+    for (let i = 0; i < 8; i += 1) {
+      const phase = (world.elapsed * (75 + i * 9) + i * width * 0.41) % (width + 90);
+      const x = width - phase;
+      const y = waterY + (12 + i % 4 * 13) * gameScale();
+      context.beginPath();
+      context.moveTo(x, y);
+      context.quadraticCurveTo(x + 16 * gameScale(), y - 4 * gameScale(), x + 32 * gameScale(), y);
+      context.stroke();
+    }
+  }
+
+  function updateKite(delta) {
+    const kite = world.kite;
+    const scale = gameScale();
+    const horizontalTravel = kiteWindSpeed * scale * delta;
+    player.velocityX = kiteWindSpeed * scale;
+    player.x += horizontalTravel;
+    player.velocity += (kite.liftHeld ? -kiteLiftAcceleration : kiteGravity) * scale * delta;
+    player.velocity = Math.max(-kiteRiseSpeed * scale, Math.min(kiteFallSpeed * scale, player.velocity));
+    player.y += player.velocity * delta;
+    player.rotation += horizontalTravel / Math.max(1, player.radius);
+
+    const cameraX = width * 0.42;
+    const scroll = Math.max(0, player.x - cameraX);
+    if (scroll > 0) {
+      player.x = cameraX;
+      if (world.finishLine?.orientation === "vertical") world.finishLine.x -= scroll;
+      for (const star of world.stars) star.x -= scroll;
+      for (const echo of world.trail) echo.x -= scroll;
+      kite.nextStarX -= scroll;
+    }
+    for (const cloud of kite.clouds) {
+      cloud.x -= horizontalTravel * 0.45;
+      if (cloud.x + cloud.size < 0) {
+        cloud.x = width + Math.random() * width * 0.5;
+        cloud.y = height * (0.12 + Math.random() * 0.55);
+      }
+    }
+    world.stars = world.stars.filter((star) => !star.collected && star.x > -starRadius());
+    ensureKiteCourse();
+
+    if (player.y + player.radius >= kite.waterY) {
+      showGameOver();
+      return false;
+    }
+    return true;
   }
 
   // Castle mode arena.
@@ -906,7 +1143,7 @@
     const scale = gameScale();
     const leftWall = castleLeftWall();
     const rightWall = castleRightWall();
-    const wallWidth = 5 * scale;
+    const wallWidth = castleWallWidth();
     const floorColors = ["#FFE80F", "#32E2F1", "#8C12FB", "#FF0080", "#8C12FB"];
     const castle = world.castle;
 
@@ -927,11 +1164,11 @@
     context.restore();
 
     context.fillStyle = "#FFFFFF";
-    context.fillRect(leftWall - wallWidth / 2, 0, wallWidth, height);
-    context.fillRect(rightWall - wallWidth / 2, 0, wallWidth, height);
+    context.fillRect(0, 0, wallWidth, height);
+    context.fillRect(rightWall, 0, wallWidth, height);
     for (let y = 4 * scale; y < height; y += 14 * scale) {
       context.beginPath();
-      context.arc(rightWall, y, 3 * scale, -Math.PI / 2, Math.PI / 2);
+      context.arc(rightWall - 3 * scale, y, 3 * scale, -Math.PI / 2, Math.PI / 2);
       context.fill();
     }
 
@@ -955,13 +1192,13 @@
       context.fillStyle = "rgba(255,255,255,.28)";
       context.fillRect(leftWall, floorY, rightWall - leftWall, 1.5 * scale);
 
-      const spikeHeight = 16 * scale;
+      const spikeHeight = castleSpikeHeight * scale;
       const spikeWidth = 8 * scale;
       for (const position of castleHazardLayouts[floorIndex]) {
         const centerX = leftWall + (rightWall - leftWall) * position;
         for (let spike = -1; spike <= 1; spike += 1) {
           const spikeX = centerX + spike * spikeWidth;
-          context.fillStyle = spike === 0 ? "#FFE80F" : "#FF0080";
+          context.fillStyle = "#FF0080";
           context.beginPath();
           context.moveTo(spikeX - spikeWidth / 2, floorY);
           context.lineTo(spikeX, floorY - spikeHeight);
@@ -971,16 +1208,6 @@
         }
       }
 
-      if (floorIndex < 4) {
-        const ledgeY = floorY - 34 * scale;
-        const ledgeX = leftWall + (rightWall - leftWall) * (floorIndex % 2 ? 0.2 : 0.58);
-        context.fillStyle = floorColors[floorIndex + 1];
-        for (let tile = 0; tile < 4; tile += 1) {
-          context.beginPath();
-          context.roundRect(ledgeX + tile * 18 * scale, ledgeY, 16 * scale, 8 * scale, 2 * scale);
-          context.fill();
-        }
-      }
     }
 
     const flagX = castleFlagX();
@@ -1810,6 +2037,10 @@
       world.slimeSaws = world.slimeSaws.filter((saw) => saw.y < height + saw.radius);
       world.slimeDistance += shift;
     }
+    if (world.mode === "kite") {
+      world.kite.waterY += shift;
+      for (const cloud of world.kite.clouds) cloud.y += shift;
+    }
     if (world.mode === "castle") world.castle.cameraOffset += shift;
     if (world.spawnPlatform?.active) world.spawnPlatform.y += shift;
   }
@@ -1864,7 +2095,7 @@
     for (const position of castleHazardLayouts[castle.floorIndex]) {
       const spikeX = leftWall + (rightWall - leftWall) * position;
       const nearSpike = Math.abs(player.x - spikeX) < 14 * scale + player.radius * 0.6;
-      const overlappingSpikeHeight = player.y + player.radius > floorY - 16 * scale;
+      const overlappingSpikeHeight = player.y + player.radius > floorY - castleSpikeHeight * scale;
       if (nearSpike && overlappingSpikeHeight) {
         showGameOver();
         return false;
@@ -1889,6 +2120,8 @@
       player.y = castleFloorY(castle.floorIndex) - player.radius;
       player.velocity = 0;
       player.grounded = true;
+      player.color = chooseDifferentColor(player.color);
+      playSoundEffect("colorSwitch");
     }
     return true;
   }
@@ -1898,7 +2131,9 @@
     world.elapsed += delta;
     const previousX = player.x;
     const previousY = player.y;
-    if (world.mode === "castle") {
+    if (world.mode === "kite") {
+      if (!updateKite(delta)) return false;
+    } else if (world.mode === "castle") {
       if (!updateCastle(delta)) return false;
     } else if (runnerModes.has(world.mode)) {
       const difficulty = hopDifficulty();
@@ -2080,7 +2315,8 @@
     const hangingOnBounceWall = world.mode === "bounce"
       && player.wallSide !== null
       && player.wallHangRemaining > 0;
-    if (!runnerModes.has(world.mode) && world.mode !== "slime" && world.mode !== "castle" && !hangingOnBounceWall && !(world.mode === "bounce" && player.wallSide !== null)) {
+    if (!runnerModes.has(world.mode) && world.mode !== "slime" && world.mode !== "castle"
+      && world.mode !== "kite" && !hangingOnBounceWall && !(world.mode === "bounce" && player.wallSide !== null)) {
       player.velocity += (world.mode === "bounce" ? bounceGravity : gravity) * gameScale() * delta;
       player.y += player.velocity * delta;
     }
@@ -2193,9 +2429,16 @@
   // Shared scene composition.
   function draw() {
     drawBackground();
+    context.save();
+    if (world.mode === "castle") {
+      const zoom = 1.35;
+      context.translate(0, height * 0.68 - player.y * zoom);
+      context.scale(1, zoom);
+    }
     if (world.mode === "castle") drawCastleArena();
     if (world.mode === "bounce") drawBounceArena();
     if (world.mode === "slime") drawSlimeArena();
+    if (world.mode === "kite") drawKiteArena();
     drawFinishLine();
     drawSpawnPlatform();
     world.stars.forEach(drawStar);
@@ -2205,6 +2448,7 @@
     drawPlayerTrail();
     drawSlimeAim();
     drawPlayer();
+    context.restore();
   }
 
   function gameFrame(time) {
@@ -2243,7 +2487,18 @@
     event.preventDefault();
     jump();
   });
+  window.addEventListener("pointerup", releaseKiteLift);
+  window.addEventListener("pointercancel", releaseKiteLift);
+  window.addEventListener("blur", releaseKiteLift);
+  document.addEventListener("keyup", releaseKiteLift);
   pauseButton.addEventListener("click", pauseGame);
+  fullscreenButton.addEventListener("click", toggleFullscreen);
+  document.addEventListener("fullscreenchange", () => {
+    updateFullscreenButton();
+    setCanvasSize();
+  });
+  fullscreenButton.disabled = !document.fullscreenEnabled || !document.documentElement.requestFullscreen;
+  updateFullscreenButton();
   document.addEventListener("keydown", handleInput);
   window.addEventListener("resize", setCanvasSize);
   setCanvasSize();

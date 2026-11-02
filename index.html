@@ -105,7 +105,14 @@
       fill: #FFE80F;
     }
 
-    .pause-button {
+    .hud-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .pause-button,
+    .fullscreen-button {
       display: grid;
       width: 44px;
       height: 44px;
@@ -117,13 +124,15 @@
       cursor: pointer;
     }
 
-    .pause-button svg {
+    .pause-button svg,
+    .fullscreen-button svg {
       width: 20px;
       height: 20px;
       fill: currentColor;
     }
 
-    .pause-button:focus-visible {
+    .pause-button:focus-visible,
+    .fullscreen-button:focus-visible {
       outline: 2px solid #32E2F1;
       outline-offset: 3px;
     }
@@ -202,6 +211,7 @@
     }
 
     .home-utility-button {
+      position: relative;
       display: grid;
       width: clamp(26px, 9cqw, 40px);
       height: clamp(26px, 9cqw, 40px);
@@ -222,6 +232,15 @@
       width: 100%;
       height: 100%;
       fill: currentColor;
+    }
+
+    .home-utility-glyph {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      line-height: 1;
+      text-align: center;
     }
 
     .home-utility-button:focus-visible {
@@ -1043,9 +1062,14 @@
         <svg class="score-star" viewBox="0 0 24 24" aria-hidden="true"><path d="m12 1.8 3.1 6.3 7 1-5.05 4.93 1.2 6.97L12 17.7l-6.25 3.3 1.2-6.97L1.9 9.1l7-1L12 1.8z"/></svg>
         <span class="score-value" id="score" aria-live="polite">0</span>
       </div>
-      <button class="pause-button" id="pause-button" aria-label="Pause game" title="Pause game">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4h4v16H6zm8 0h4v16h-4z"/></svg>
-      </button>
+      <div class="hud-actions">
+        <button class="fullscreen-button" id="fullscreen-button" aria-label="Enter fullscreen" title="Enter fullscreen" aria-pressed="false">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h6v2H6v4H4zm10 0h6v6h-2V6h-4zM4 14h2v4h4v2H4zm14 0h2v6h-6v-2h4z"/></svg>
+        </button>
+        <button class="pause-button" id="pause-button" aria-label="Pause game" title="Pause game">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4h4v16H6zm8 0h4v16h-4z"/></svg>
+        </button>
+      </div>
     </section>
     <section class="overlay" id="overlay">
       <div class="panel" id="panel"></div>
@@ -1055,6 +1079,6 @@
       <span class="hint">Tap, click, or press SPACE</span>
     </div>
   </main>
-  <script src="csr.js"></script>
+  <script src="csr.js?v=4"></script>
 </body>
 </html>
