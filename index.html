@@ -37,7 +37,7 @@
 
     .game-shell {
       position: relative;
-      width: min(100vw, 460px, calc(100dvh * 0.5625));
+      width: min(100vw, 400px, calc(100dvh * 0.5625));
       aspect-ratio: 9 / 16;
       height: auto;
       max-height: 100dvh;
@@ -49,11 +49,11 @@
       box-shadow: none;
     }
 
-    .game-shell.fullscreen-gameplay {
-      width: 100vw;
-      height: 100dvh;
-      max-height: none;
-      aspect-ratio: auto;
+    .game-shell.gameplay-active {
+      width: min(100vw, 400px, calc(100dvh * 0.5625));
+      height: auto;
+      max-height: 100dvh;
+      aspect-ratio: 9 / 16;
       border: 0;
       border-radius: 0;
     }
@@ -83,26 +83,17 @@
     .score-display {
       display: flex;
       align-items: center;
-      gap: 9px;
       min-height: 44px;
-      padding: 0 13px;
-      border: 1px solid rgba(255,255,255,.16);
-      border-radius: 24px;
-      background: rgba(39,39,39,.82);
+      padding: 0 4px;
     }
 
     .score-value {
       margin: 0;
-      font-size: 23px;
+      color: #fff;
+      font-size: 22px;
       font-weight: 800;
       line-height: 1;
       font-variant-numeric: tabular-nums;
-    }
-
-    .score-star {
-      width: 22px;
-      height: 22px;
-      fill: #FFE80F;
     }
 
     .hud-actions {
@@ -111,28 +102,26 @@
       gap: 8px;
     }
 
-    .pause-button,
-    .fullscreen-button {
+    .pause-button {
       display: grid;
-      width: 44px;
-      height: 44px;
+      width: clamp(26px, 9cqw, 40px);
+      height: clamp(26px, 9cqw, 40px);
       place-items: center;
-      border: 1px solid rgba(255,255,255,.14);
+      padding: 5px;
+      border: 0;
       border-radius: 50%;
-      background: rgba(39,39,39,.82);
+      background: rgba(255,255,255,.16);
       color: #fff;
       cursor: pointer;
     }
 
-    .pause-button svg,
-    .fullscreen-button svg {
-      width: 20px;
-      height: 20px;
+    .pause-button svg {
+      width: 100%;
+      height: 100%;
       fill: currentColor;
     }
 
-    .pause-button:focus-visible,
-    .fullscreen-button:focus-visible {
+    .pause-button:focus-visible {
       outline: 2px solid #32E2F1;
       outline-offset: 3px;
     }
@@ -1059,13 +1048,9 @@
     <canvas id="game-canvas" aria-label="Game field"></canvas>
     <section class="hud" id="hud" aria-label="Game status">
       <div class="score-display" aria-label="Stars collected">
-        <svg class="score-star" viewBox="0 0 24 24" aria-hidden="true"><path d="m12 1.8 3.1 6.3 7 1-5.05 4.93 1.2 6.97L12 17.7l-6.25 3.3 1.2-6.97L1.9 9.1l7-1L12 1.8z"/></svg>
         <span class="score-value" id="score" aria-live="polite">0</span>
       </div>
       <div class="hud-actions">
-        <button class="fullscreen-button" id="fullscreen-button" aria-label="Enter fullscreen" title="Enter fullscreen" aria-pressed="false">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h6v2H6v4H4zm10 0h6v6h-2V6h-4zM4 14h2v4h4v2H4zm14 0h2v6h-6v-2h4z"/></svg>
-        </button>
         <button class="pause-button" id="pause-button" aria-label="Pause game" title="Pause game">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4h4v16H6zm8 0h4v16h-4z"/></svg>
         </button>
@@ -1079,6 +1064,6 @@
       <span class="hint">Tap, click, or press SPACE</span>
     </div>
   </main>
-  <script src="csr.js?v=4"></script>
+  <script src="csr.js?v=5"></script>
 </body>
 </html>

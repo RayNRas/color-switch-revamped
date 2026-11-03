@@ -7,7 +7,6 @@
   const hud = document.getElementById("hud");
   const scoreElement = document.getElementById("score");
   const pauseButton = document.getElementById("pause-button");
-  const fullscreenButton = document.getElementById("fullscreen-button");
   const controls = document.getElementById("controls");
   const musicTracks = {
     menu: "assets/fonts/Color%20Switch%20Soundtrack%20-%20Main%20Menu.mp3",
@@ -37,9 +36,9 @@
     colorSwitch: { path: "assets/fonts/colorswitch.wav", volume: 0.35 },
     button: { path: "assets/fonts/button.wav", volume: 0.25 }
   };
-  const endlessModeEnabled = new Map([["classic", true], ["bounce", true], ["hop", true], ["slime", true]]);
+  const endlessModeEnabled = new Map([["classic", true], ["bounce", true], ["hop", true], ["jump", true], ["slime", true]]);
   // Mode-browser catalog: featured first, remaining modes alphabetically.
-  const featuredModes = ["classic", "run", "kite", "galaxy", "invader"];
+  const featuredModes = ["classic", "run", "jump", "kite", "galaxy", "invader"];
   const modeBannerColors = {
     autumn: "#C66B32",
     avalanche: "#B8E9FA",
@@ -127,11 +126,13 @@
       : Promise.resolve(null);
   }
   const colors = ["#32E2F1", "#FFE80F", "#8C12FB", "#FF0080"];
-  const spinSpeed = 0.65;
+  const spinSpeed = 1.05;
   const trailLifetime = 0.32;
   const world = {
     rings: [],
+    classicObstacleIndex: 0,
     stars: [],
+    scorePopups: [],
     pickups: [],
     trail: [],
     spawnPlatform: null,
@@ -154,6 +155,8 @@
     hopPlatforms: [],
     hopNextObstacleX: 0,
     hopDistance: 0,
+    jumpPlatforms: [],
+    jumpHazards: [],
     // Slime mode course and aiming state.
     slimeRails: [],
     slimeBlades: [],
@@ -172,7 +175,7 @@
     lastTime: 0,
     trailClock: 0
   };
-  const playableModes = new Set(["classic", "bounce", "hop", "slime", "castle", "run", "kite"]);
+  const playableModes = new Set(["classic", "bounce", "hop", "jump", "slime", "castle", "run", "kite"]);
   const runnerModes = new Set(["hop", "run"]);
   const player = {
     x: 0,
@@ -193,13 +196,14 @@
     hopPlatform: null,
     rotation: 0
   };
-  const baseStarRadius = 18;
+  const baseStarRadius = 16.5;
   const basePickupRadius = 14;
   let width = 0;
   let height = 0;
   let pixelRatio = 1;
   const gravity = 1180;
   const jumpVelocity = -420;
+  const jumpModeVelocity = -760;
   // Bounce mode physics.
   const bounceSpeed = 320;
   const bounceJumpVelocity = -700;
@@ -211,11 +215,14 @@
   // Castle mode course layout.
   const castleHazardLayouts = [[0.35, 0.67], [0.48], [0.32, 0.67], [0.45, 0.72], []];
   const castleSpikeHeight = 8;
+  const castleCameraZoom = 1.35;
   // Hop mode physics.
   const hopSpeed = 185;
   const hopTrailLifetime = 0.42;
   const hopJumpVelocity = -430;
   const hopGravity = 360;
+  const runJumpVelocity = -300;
+  const runGravity = 650;
   const hopSlamSpeed = 1050;
   const kiteWindSpeed = 155;
   const kiteLiftAcceleration = 540;
@@ -226,11 +233,12 @@
   const slimeGravity = 820;
   const shapeTypes = ["circle", "triangle", "square", "hexagon"];
   function ringRadius() {
+    if (world.mode === "jump") return Math.min(width * 0.34, 96 * gameScale());
     return Math.min(width * 0.29, 122 * gameScale());
   }
 
   function gameScale() {
-    return Math.min(width / 460, 1);
+    return Math.min(width / 460, 1) * 0.9;
   }
 
   function castleWallWidth() {
@@ -238,11 +246,11 @@
   }
 
   function castleLeftWall() {
-    return castleWallWidth();
+    return 0;
   }
 
   function castleRightWall() {
-    return width - castleWallWidth();
+    return width;
   }
 
   function castleFloorY(floorIndex) {
@@ -335,6 +343,11 @@
     setBackgroundMusic(musicTracks[mode] ? mode : "menu");
   }
 
+  function unlockBackgroundMusic() {
+    if (!backgroundMusic.paused) return;
+    setBackgroundMusic(requestedMusicTrack || "menu");
+  }
+
   function unlockSoundEffects() {
     if (soundContext?.state === "suspended") {
       soundContext.resume().catch((error) => console.error("Could not start sound effects", error));
@@ -372,8 +385,14 @@
   }
 
   function ringSpacing() {
+    if (world.mode === "jump") return jumpPlatformSpacing() * 2;
     const difficulty = world.mode === "classic" && !world.levelMode ? Math.min(1, world.elapsed / 90) : 0;
+    if (world.mode === "classic") return Math.min(height * (0.54 - difficulty * 0.02), width * 1.05);
     return Math.min(height * (0.66 - difficulty * 0.04), width * 1.25);
+  }
+
+  function jumpPlatformSpacing() {
+    return 205 * gameScale();
   }
 
   function hopDifficulty() {
@@ -401,39 +420,25 @@
     world.bounceFloorY = height * 0.78;
     if (world.running && world.mode === "bounce" && player.grounded) player.y = world.bounceFloorY - player.radius;
     for (const ring of world.rings) {
-      ring.x = width / 2;
-      ring.radius = ringRadius();
+      ring.radius = ring.pattern === "pinwheel"
+        ? 23 * gameScale()
+        : ringRadius() * (ring.pattern === "triangle" ? 1.45 : 1);
+      if (ring.pattern === "pinwheel") {
+        ring.pathMinX = 40 * gameScale();
+        ring.pathMaxX = width - ring.pathMinX;
+        ring.x = Math.max(ring.pathMinX, Math.min(ring.pathMaxX, ring.x));
+        ring.previousX = ring.x;
+      } else {
+        ring.x = width / 2;
+      }
     }
     for (const item of [...world.stars, ...world.pickups]) item.x = width / 2;
   }
 
-  function updateFullscreenButton() {
-    const isFullscreen = document.fullscreenElement === document.documentElement;
-    const label = isFullscreen ? "Exit fullscreen" : "Enter fullscreen";
-    fullscreenButton.setAttribute("aria-label", label);
-    fullscreenButton.setAttribute("aria-pressed", String(isFullscreen));
-    fullscreenButton.title = label;
-    fullscreenButton.innerHTML = isFullscreen
-      ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 8h3V5h2v5H5zm9-3h2v3h3v2h-5zM5 14h5v5H8v-3H5zm9 0h5v2h-3v3h-2z"/></svg>'
-      : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h6v2H6v4H4zm10 0h6v6h-2V6h-4zM4 14h2v4h4v2H4zm14 0h2v6h-6v-2h4z"/></svg>';
-  }
-
-  function setFullscreenGameplay(enabled) {
-    const changed = gameShell.classList.contains("fullscreen-gameplay") !== enabled;
-    gameShell.classList.toggle("fullscreen-gameplay", enabled);
+  function setGameplayActive(enabled) {
+    const changed = gameShell.classList.contains("gameplay-active") !== enabled;
+    gameShell.classList.toggle("gameplay-active", enabled);
     if (changed) setCanvasSize();
-  }
-
-  async function toggleFullscreen() {
-    try {
-      if (document.fullscreenElement === document.documentElement) {
-        await document.exitFullscreen();
-      } else if (document.documentElement.requestFullscreen) {
-        await document.documentElement.requestFullscreen();
-      }
-    } catch (error) {
-      console.error("Could not toggle fullscreen", error);
-    }
   }
 
   // Screen: main menu.
@@ -441,8 +446,7 @@
     world.running = false;
     world.paused = false;
     world.kite.liftHeld = false;
-    setFullscreenGameplay(false);
-    if (document.fullscreenElement === document.documentElement) document.exitFullscreen().catch((error) => console.error("Could not exit fullscreen", error));
+    setGameplayActive(false);
     setBackgroundMusic("menu");
     panel.className = "panel main-menu";
     controls.setAttribute("aria-label", "Jump controls");
@@ -505,7 +509,7 @@
 
   // Screen: mode browser.
   function showModes() {
-    setFullscreenGameplay(false);
+    setGameplayActive(false);
     setBackgroundMusic("menu");
     const modeRows = [
       ...featuredModes,
@@ -564,7 +568,7 @@
 
   // Screen: level selection.
   function showLevelSelect(modeName) {
-    setFullscreenGameplay(false);
+    setGameplayActive(false);
     setBackgroundMusic("menu");
     const modeTitle = modeName[0].toUpperCase() + modeName.slice(1);
     const endlessAvailable = endlessModeEnabled.get(modeName) === true;
@@ -577,6 +581,8 @@
           ? "Roll across each floor, leap over spikes, and reach the flag at the top."
           : modeName === "kite"
           ? "Hold to catch the lift, glide down on release, and stay above the water."
+          : modeName === "jump"
+          ? "Leap between small platforms and pass through each spinning ring."
           : "Level 1 is a basic, easy course. Reach the finish line to complete it."}</p>
         <button class="action-button level-choice" data-start-level>
           <strong>LEVEL 1</strong><small>BASIC · EASY</small>
@@ -690,28 +696,99 @@
 
   // Shared gameplay setup and level initialization.
   function makeRing(y) {
-    const shape = shapeTypes[Math.floor(Math.random() * shapeTypes.length)];
+    const pinwheelWeight = Math.min(4, Math.floor(world.score / 4));
+    const classicPatterns = ["ring", "twin", "triangle", "line", "wheel", ...Array(pinwheelWeight + 1).fill("pinwheel")];
+    const pattern = world.mode === "classic"
+      ? world.classicObstacleIndex++ === 0
+        ? "ring"
+        : classicPatterns[Math.floor(Math.random() * classicPatterns.length)]
+      : "ring";
+    const shape = pattern === "triangle"
+      ? "triangle"
+      : pattern === "ring"
+      ? shapeTypes[Math.floor(Math.random() * shapeTypes.length)]
+      : "circle";
     const sides = shape === "hexagon" ? 6 : shape === "triangle" ? 3 : 4;
-    const sequence = makeColorSequence(sides);
+    const sequence = pattern === "pinwheel" ? [1, 2, 3, 0] : makeColorSequence(sides);
     const angle = Math.random() * Math.PI * 2;
+    const pinwheelPadding = 60 * gameScale();
     const ring = {
-      x: width / 2,
+      x: pattern === "pinwheel"
+        ? pinwheelPadding
+        : world.mode === "jump" ? jumpXAt(y) : width / 2,
       y,
-      radius: ringRadius(),
+      radius: pattern === "pinwheel" ? 23 * gameScale() : ringRadius() * (pattern === "triangle" ? 1.45 : 1),
+      pattern,
       shape,
       sides,
       colors: sequence,
+      twinColors: mirroredTwinColors(sequence),
       angle,
       spin: spinSpeed,
-      thickness: 18 * gameScale(),
+      pathMinX: pinwheelPadding,
+      pathMaxX: width - pinwheelPadding,
+      pathDirection: 1,
+      pathSpeed: 145 * gameScale(),
+      previousX: pattern === "pinwheel" ? pinwheelPadding : null,
+      thickness: 24 * gameScale(),
+      linePhase: Math.random() * width,
+      lineSpeed: 110 * gameScale(),
+      lineSeed: Math.floor(Math.random() * 0x7fffffff),
+      lineColors: [],
       cornerCut: 0.1
     };
-    world.rings.push(ring);
-    world.stars.push({ x: ring.x, y, collected: false, rotation: Math.random() * 0.5, pulse: Math.random() * Math.PI * 2 });
 
-    const pickupY = y + ring.radius + 45;
-    const pickupColor = ringSurfaceAt(ring, ring.x, ring.y + ring.radius).color;
-    world.pickups.push({ x: width / 2, y: pickupY, color: pickupColor, collected: false });
+    if (pattern === "pinwheel") {
+      const rowCount = Math.min(4, 1 + Math.floor(world.score / 4));
+      const pathSpan = ring.pathMaxX - ring.pathMinX;
+      for (let index = 0; index < rowCount; index += 1) {
+        const progress = rowCount === 1 ? 0 : index / (rowCount - 1);
+        const x = ring.pathMinX + pathSpan * progress;
+        world.rings.push({
+          ...ring,
+          x,
+          previousX: x,
+          pathDirection: index % 2 === 0 ? 1 : -1,
+          pathRowLead: index === 0,
+          angle: ring.angle + index * Math.PI / 6
+        });
+      }
+      return;
+    }
+
+    world.rings.push(ring);
+    world.stars.push({
+      x: ring.x,
+      y: y - (pattern === "line" ? 30 * gameScale() : 0),
+      collected: false,
+      rotation: Math.random() * 0.5,
+      pulse: Math.random() * Math.PI * 2
+    });
+
+    if (world.mode === "jump") {
+      const switchPlatform = world.jumpPlatforms.reduce((nearest, platform) => (
+        platform.y > y && (!nearest || platform.y < nearest.y) ? platform : nearest
+      ), null);
+      if (switchPlatform) {
+        world.pickups.push({
+          x: switchPlatform.x + switchPlatform.width / 2,
+          y: switchPlatform.y - player.radius - pickupRadius() * 1.1,
+          color: ring.colors[0],
+          allowedColors: ring.colors.slice(),
+          collected: false
+        });
+      }
+    } else {
+      const pickupY = y + ring.radius + 45;
+      const pickupColor = ringSurfaceAt(ring, ring.x, ring.y + ring.radius).color;
+      world.pickups.push({
+        x: ring.x,
+        y: pickupY,
+        color: pickupColor,
+        allowedColors: ring.colors.slice(),
+        collected: false
+      });
+    }
   }
 
   function makeColorSequence(length) {
@@ -761,10 +838,12 @@
     world.running = false;
     world.mode = mode;
     world.levelMode = levelMode;
-    setFullscreenGameplay(true);
+    setGameplayActive(true);
     world.finishLine = null;
     world.rings = [];
+    world.classicObstacleIndex = 0;
     world.stars = [];
+    world.scorePopups = [];
     world.pickups = [];
     world.trail = [];
     world.trailClock = 0;
@@ -795,7 +874,7 @@
       : height * 0.72;
     player.velocity = 0;
     player.velocityX = 0;
-    player.grounded = mode === "bounce" || mode === "castle";
+    player.grounded = mode === "bounce" || mode === "castle" || mode === "jump";
     player.wallSide = null;
     player.wallHangRemaining = 0;
     player.wallSlipSpeed = 0;
@@ -806,15 +885,16 @@
     world.bounceNextHazardY = mode === "bounce"
       ? world.bounceFloorY - (levelMode ? 680 : 520) * gameScale()
       : 0;
-    if (mode === "classic") {
+    if (mode === "classic" || mode === "jump") {
       world.spawnPlatform = {
         x: player.x,
         y: player.y + player.radius,
-        width: ringRadius() * 1.1,
-        height: 6 * gameScale(),
+        width: mode === "jump" ? 42 * gameScale() : ringRadius() * 1.1,
+        height: mode === "jump" ? 7 * gameScale() : 6 * gameScale(),
         active: true
       };
     }
+    world.jumpPlatforms = [];
     world.hopGroundY = height * 0.78;
     world.hopObstacles = [];
     world.hopHoles = [];
@@ -822,6 +902,7 @@
     world.hopPlatforms = [];
     world.hopNextObstacleX = width + 190 * gameScale();
     world.hopDistance = 0;
+    world.jumpHazards = [];
     world.slimeRails = [];
     world.slimeBlades = [];
     world.slimeSaws = [];
@@ -871,19 +952,26 @@
       firstRing.angle = Math.PI / 4;
       player.color = firstRing.colors[0];
       world.pickups[0].collected = true;
+    } else if (mode === "jump") {
+      ensureJumpCourse();
+      for (let i = 1; i <= 4; i += 1) {
+        makeRing(world.spawnPlatform.y - i * ringSpacing());
+      }
     }
     scoreElement.textContent = "0";
     controls.setAttribute("aria-label", mode === "kite" ? "Kite flight controls" : mode === "slime" ? "Slime aiming controls" : mode === "bounce" ? "Bounce controls" : mode === "hop" ? "Hop controls" : mode === "run" ? "Run controls" : mode === "castle" ? "Castle controls" : "Jump controls");
     controls.classList.toggle("castle-controls", mode === "castle");
     const jumpButton = document.getElementById("jump-button");
-    jumpButton.textContent = mode === "kite" ? "HOLD TO RISE" : mode === "slime" ? "AIM & LEAP" : mode === "hop" ? "TAP TO JUMP / SLAM" : mode === "run" || mode === "bounce" || mode === "castle" ? "TAP TO JUMP" : "TAP TO BOUNCE";
+    jumpButton.textContent = mode === "kite" ? "HOLD TO RISE" : mode === "slime" ? "AIM & LEAP" : mode === "hop" ? "TAP TO JUMP / SLAM" : mode === "run" || mode === "bounce" || mode === "castle" || mode === "jump" ? "TAP TO JUMP" : "TAP TO BOUNCE";
     jumpButton.setAttribute("aria-label", mode === "kite" ? "Hold to rise" : "Jump");
     controls.querySelector(".hint").textContent = mode === "slime"
       ? "Aim and launch · Space to shoot"
       : mode === "kite"
       ? "Hold to climb · release to glide · wind pushes right"
       : mode === "run"
-      ? "Auto-run · tap to jump over obstacles"
+      ? "Auto-run · short jumps over mixed hazards"
+      : mode === "jump"
+      ? "Leap between platforms · time each ring crossing"
       : mode === "hop"
       ? "Auto-roll · tap to leap, tap again to slam"
       : mode === "bounce"
@@ -919,6 +1007,25 @@
   function jump() {
     if (!world.running) return;
     unlockSoundEffects();
+    if (world.mode === "jump") {
+      if (!player.grounded) return;
+      const target = world.jumpPlatforms
+        .find((platform) => platform.y < player.y - 12 * gameScale())
+        ?? world.jumpPlatforms[0];
+      if (!target) return;
+      const targetCenter = target.x + target.width / 2;
+      const scale = gameScale();
+      const verticalDistance = target.y - (player.y + player.radius);
+      const jumpSpeed = Math.abs(jumpModeVelocity * scale);
+      const jumpGravity = gravity * scale;
+      const landingTime = (jumpSpeed + Math.sqrt(jumpSpeed ** 2 + 2 * jumpGravity * verticalDistance)) / jumpGravity;
+      player.velocity = jumpModeVelocity * scale;
+      player.velocityX = (targetCenter - player.x) / landingTime;
+      player.grounded = false;
+      if (world.spawnPlatform) world.spawnPlatform.active = false;
+      playSound(jumpSound, "jump.wav");
+      return;
+    }
     if (world.mode === "kite") {
       world.kite.liftHeld = true;
       return;
@@ -967,7 +1074,7 @@
     if (runnerModes.has(world.mode)) {
       if (world.mode === "run" && !player.grounded) return;
       if (player.grounded) {
-        player.velocity = hopJumpVelocity * gameScale();
+        player.velocity = (world.mode === "run" ? runJumpVelocity : hopJumpVelocity) * gameScale();
         player.grounded = false;
         player.hopSlammed = false;
       } else if (!player.hopSlammed) {
@@ -1148,7 +1255,7 @@
     const castle = world.castle;
 
     context.fillStyle = "#29292b";
-    context.fillRect(leftWall, 0, rightWall - leftWall, height);
+    context.fillRect(leftWall, -height * 2, rightWall - leftWall, height * 5);
 
     context.save();
     context.globalAlpha = 0.1;
@@ -1164,9 +1271,9 @@
     context.restore();
 
     context.fillStyle = "#FFFFFF";
-    context.fillRect(0, 0, wallWidth, height);
-    context.fillRect(rightWall, 0, wallWidth, height);
-    for (let y = 4 * scale; y < height; y += 14 * scale) {
+    context.fillRect(0, -height * 2, wallWidth, height * 5);
+    context.fillRect(rightWall, -height * 2, wallWidth, height * 5);
+    for (let y = -height * 2 + 4 * scale; y < height * 3; y += 14 * scale) {
       context.beginPath();
       context.arc(rightWall - 3 * scale, y, 3 * scale, -Math.PI / 2, Math.PI / 2);
       context.fill();
@@ -1277,33 +1384,15 @@
 
   function drawSlimeSaw(saw) {
     context.save();
-    context.setLineDash([2 * gameScale(), 6 * gameScale()]);
+    context.setLineDash([2 * gameScale(), 3 * gameScale()]);
     context.strokeStyle = "rgba(255,255,255,.5)";
     context.lineWidth = 2 * gameScale();
     context.beginPath();
     context.moveTo(saw.guideStart, saw.y);
     context.lineTo(saw.guideEnd, saw.y);
     context.stroke();
-    context.setLineDash([]);
-    context.translate(saw.x, saw.y);
-    context.rotate(saw.rotation);
-    context.fillStyle = colors[saw.color];
-    context.beginPath();
-    for (let i = 0; i < 32; i += 1) {
-      const angle = i * Math.PI / 16;
-      const radius = saw.radius * (i % 4 < 2 ? 1 : 0.76);
-      const x = Math.cos(angle) * radius;
-      const y = Math.sin(angle) * radius;
-      if (i === 0) context.moveTo(x, y);
-      else context.lineTo(x, y);
-    }
-    context.closePath();
-    context.fill();
-    context.fillStyle = "#272727";
-    context.beginPath();
-    context.arc(0, 0, saw.radius * 0.28, 0, Math.PI * 2);
-    context.fill();
     context.restore();
+    drawPinwheel(saw.x, saw.y, saw.radius, saw.rotation, [colors[saw.color], "#FFE80F", "#32E2F1", "#FF0080"]);
   }
 
   function ensureSlimeCourse() {
@@ -1498,6 +1587,34 @@
     }
   }
 
+  function drawJumpPlatforms() {
+    for (const platform of world.jumpPlatforms) {
+      context.fillStyle = "#FFFFFF";
+      context.beginPath();
+      context.roundRect(platform.x, platform.y, platform.width, 7 * gameScale(), 4 * gameScale());
+      context.fill();
+    }
+    const target = world.jumpPlatforms.find((platform) => platform.y < player.y - 12 * gameScale()) ?? world.jumpPlatforms[0];
+    if (!target) return;
+    const targetX = target.x + target.width / 2;
+    const targetY = target.y - player.radius;
+    const progress = 18;
+    context.save();
+    context.setLineDash([7, 9]);
+    context.strokeStyle = "rgba(255,255,255,.82)";
+    context.lineWidth = 2 * gameScale();
+    context.beginPath();
+    for (let i = 0; i <= progress; i += 1) {
+      const t = i / progress;
+      const x = player.x + (targetX - player.x) * t;
+      const y = player.y + (targetY - player.y) * t;
+      if (i === 0) context.moveTo(x, y);
+      else context.lineTo(x, y);
+    }
+    context.stroke();
+    context.restore();
+  }
+
   function drawHopArena() {
     const groundY = world.hopGroundY;
     const groundThickness = 12 * gameScale();
@@ -1530,26 +1647,7 @@
       }
     }
     for (const saw of world.hopSaws) {
-      context.save();
-      context.translate(saw.x, saw.y);
-      context.rotate(saw.rotation);
-      context.fillStyle = "#FFE80F";
-      context.beginPath();
-      for (let i = 0; i < 24; i += 1) {
-        const angle = i * Math.PI / 12;
-        const radius = i % 2 === 0 ? saw.radius : saw.radius * 0.72;
-        const x = Math.cos(angle) * radius;
-        const y = Math.sin(angle) * radius;
-        if (i === 0) context.moveTo(x, y);
-        else context.lineTo(x, y);
-      }
-      context.closePath();
-      context.fill();
-      context.fillStyle = "#272727";
-      context.beginPath();
-      context.arc(0, 0, saw.radius * 0.3, 0, Math.PI * 2);
-      context.fill();
-      context.restore();
+      drawPinwheel(saw.x, saw.y, saw.radius, saw.rotation, ["#FFE80F", "#FF0080", "#32E2F1", "#8C12FB"]);
     }
     for (const platform of world.hopPlatforms) {
       context.fillStyle = "#8C12FB";
@@ -1557,6 +1655,48 @@
       context.fillStyle = "#D5B6FF";
       context.fillRect(platform.x + 5 * gameScale(), platform.y + 2 * gameScale(), platform.width - 10 * gameScale(), 2 * gameScale());
     }
+  }
+
+  function ensureJumpCourse() {
+    if (!world.spawnPlatform) return;
+    const platformWidth = 42 * gameScale();
+    const scale = gameScale();
+    const margin = Math.min(width / 2, 48 * scale);
+    while (world.jumpPlatforms.length < 12) {
+      const last = world.jumpPlatforms[world.jumpPlatforms.length - 1];
+      const previous = world.jumpPlatforms[world.jumpPlatforms.length - 2];
+      const currentX = last ? last.x + last.width / 2 : world.spawnPlatform.x;
+      const previousX = previous ? previous.x + previous.width / 2 : currentX;
+      const lastStep = currentX - previousX;
+      const step = Math.max(-58 * scale, Math.min(58 * scale,
+        lastStep * 0.35 + (Math.random() * 2 - 1) * 38 * scale));
+      const nextX = Math.max(margin, Math.min(width - margin, currentX + step));
+      const nextY = (last?.y ?? world.spawnPlatform.y) - jumpPlatformSpacing();
+      world.jumpPlatforms.push({
+        x: nextX - platformWidth / 2,
+        width: platformWidth,
+        y: nextY
+      });
+    }
+    world.jumpHazards = [];
+  }
+
+  function jumpXAt(y) {
+    const route = world.spawnPlatform?.active
+      ? [{ x: world.spawnPlatform.x - world.spawnPlatform.width / 2, width: world.spawnPlatform.width, y: world.spawnPlatform.y }, ...world.jumpPlatforms]
+      : world.jumpPlatforms;
+    if (route.length === 0) return width / 2;
+    for (let index = 1; index < route.length; index += 1) {
+      const lower = route[index - 1];
+      const upper = route[index];
+      if (y <= lower.y && y >= upper.y) {
+        const progress = (lower.y - y) / (lower.y - upper.y);
+        return lower.x + lower.width / 2
+          + (upper.x + upper.width / 2 - lower.x - lower.width / 2) * progress;
+      }
+    }
+    const last = route[route.length - 1];
+    return last.x + last.width / 2;
   }
 
   // Hop mode course generation and collision checks.
@@ -1567,9 +1707,15 @@
     while (world.hopNextObstacleX < width * 2 && world.hopNextObstacleX < courseLimit) {
       const difficulty = hopDifficulty();
       const roll = Math.random();
-      const holeChance = difficulty < 0.16 ? 0 : 0.1 + difficulty * 0.1;
-      const sawChance = difficulty < 0.38 ? 0 : 0.06 + (difficulty - 0.38) * 0.1;
-      const platformChance = difficulty < 0.72 ? 0 : 0.08 + (difficulty - 0.72) * 0.12;
+      const holeChance = world.mode === "run"
+        ? 0.16 + difficulty * 0.08
+        : difficulty < 0.16 ? 0 : 0.1 + difficulty * 0.1;
+      const sawChance = world.mode === "run"
+        ? 0.2 + difficulty * 0.08
+        : difficulty < 0.38 ? 0 : 0.06 + (difficulty - 0.38) * 0.1;
+      const platformChance = world.mode === "run"
+        ? 0.12 + difficulty * 0.06
+        : difficulty < 0.72 ? 0 : 0.08 + (difficulty - 0.72) * 0.12;
       let type = "spikes";
       if (roll < platformChance) type = "platform";
       else if (roll < platformChance + sawChance) type = "saw";
@@ -1577,13 +1723,13 @@
 
       const obstacleWidth = (type === "hole"
         ? 62 + difficulty * 34 + Math.random() * 12
-        : 26 + Math.random() * 18) * gameScale();
+        : (world.mode === "run" ? 20 : 26) + Math.random() * (world.mode === "run" ? 12 : 18)) * gameScale();
       const obstacleX = world.hopNextObstacleX;
       if (type === "spikes") {
         world.hopObstacles.push({
           x: obstacleX,
           width: world.levelMode ? (18 + Math.random() * 10) * gameScale() : obstacleWidth,
-          height: world.levelMode ? 18 * gameScale() : (25 + Math.random() * 15) * gameScale()
+          height: world.levelMode ? 18 * gameScale() : (world.mode === "run" ? 18 + Math.random() * 12 : 25 + Math.random() * 15) * gameScale()
         });
       } else if (type === "hole" || type === "platform") {
         const hole = { x: obstacleX, width: obstacleWidth };
@@ -1602,7 +1748,7 @@
           });
         }
       } else {
-        const radius = (14 + difficulty * 4) * gameScale();
+        const radius = (14 + difficulty * 5.5) * gameScale();
         world.hopSaws.push({
           x: obstacleX + obstacleWidth / 2,
           y: world.hopGroundY - radius,
@@ -1618,7 +1764,9 @@
         pulse: Math.random() * Math.PI * 2
       });
       const spacing = world.levelMode
-        ? 1100 + Math.random() * 120
+        ? world.mode === "run" ? 250 + Math.random() * 70 : 1100 + Math.random() * 120
+        : world.mode === "run"
+        ? 205 - difficulty * 28 + Math.random() * 70
         : 340 - difficulty * 90 + Math.random() * (80 - difficulty * 20);
       world.hopNextObstacleX += spacing * gameScale();
     }
@@ -1688,7 +1836,70 @@
     return true;
   }
 
+
+
+
+  function rawLineColorIndex(ring, segmentIndex) {
+    let hash = Math.imul(segmentIndex + 1, 0x45d9f3b) ^ ring.lineSeed;
+    hash = Math.imul(hash ^ (hash >>> 16), 0x45d9f3b);
+    hash = Math.imul(hash ^ (hash >>> 16), 0x45d9f3b);
+    return ((hash ^ (hash >>> 16)) >>> 0) % ring.colors.length;
+  }
+
+  function lineColorAt(ring, segmentIndex) {
+    while (ring.lineColors.length <= segmentIndex) {
+      const currentIndex = ring.lineColors.length;
+      const colorIndex = rawLineColorIndex(ring, currentIndex);
+      let color = ring.colors[colorIndex];
+      if (color === ring.lineColors[currentIndex - 1]) {
+        const offset = 1 + rawLineColorIndex(ring, currentIndex + 1) % (ring.colors.length - 1);
+        color = ring.colors[(colorIndex + offset) % ring.colors.length];
+      }
+      ring.lineColors.push(color);
+    }
+    return ring.lineColors[segmentIndex];
+  }
+
+  function twinSpinnerRadius(ring) {
+    return ring.radius * 0.32;
+  }
+
+  function twinSpinnerOffset(ring) {
+    return twinSpinnerRadius(ring) + player.radius + ring.thickness / 2 + 2 * gameScale();
+  }
+
+  function mirroredTwinColors(sequence) {
+    return [sequence[1], sequence[0], sequence[3], sequence[2]];
+  }
+
   function drawRing(ring) {
+    if (ring.pattern === "pinwheel") {
+      if (ring.pathRowLead) {
+        context.save();
+        context.setLineDash([2 * gameScale(), 6 * gameScale()]);
+        context.strokeStyle = "rgba(255,255,255,.48)";
+        context.lineWidth = 1.5 * gameScale();
+        context.beginPath();
+        context.moveTo(ring.pathMinX, ring.y);
+        context.lineTo(ring.pathMaxX, ring.y);
+        context.stroke();
+        context.restore();
+      }
+      drawPinwheel(ring.x, ring.y, ring.radius, ring.angle, ring.colors.map((color) => colors[color]));
+      return;
+    }
+    if (ring.pattern === "twin") {
+      const pairRadius = twinSpinnerRadius(ring);
+      const pairOffset = twinSpinnerOffset(ring);
+      const thickness = ring.thickness * 0.72;
+      drawSegmentedCircle(ring.x - pairOffset, ring.y, pairRadius, ring, ring.angle, thickness);
+      drawSegmentedCircle(ring.x + pairOffset, ring.y, pairRadius, ring, -ring.angle, thickness, ring.twinColors);
+      return;
+    }
+    if (ring.pattern === "line") {
+      drawSegmentedLine(ring);
+      return;
+    }
     const segmentAngle = Math.PI * 2 / ring.sides;
     context.save();
     context.lineWidth = ring.thickness;
@@ -1760,6 +1971,53 @@
         context.stroke();
       }
     }
+    if (ring.pattern === "wheel") {
+      context.save();
+      context.lineWidth = 3 * gameScale();
+      context.lineCap = "round";
+      for (let i = 0; i < ring.sides; i += 1) {
+        const angle = ring.angle + i * segmentAngle;
+        context.beginPath();
+        context.strokeStyle = colors[ring.colors[i]];
+        context.moveTo(ring.x + Math.cos(angle) * ring.radius * 0.28, ring.y + Math.sin(angle) * ring.radius * 0.28);
+        context.lineTo(ring.x + Math.cos(angle) * ring.radius * 0.78, ring.y + Math.sin(angle) * ring.radius * 0.78);
+        context.stroke();
+      }
+      context.restore();
+    }
+    context.restore();
+  }
+
+  function drawPinwheel(x, y, radius, rotation, colorSequence) {
+    context.save();
+    context.translate(x, y);
+    context.rotate(rotation);
+    for (let blade = 0; blade < 4; blade += 1) {
+      const angle = -Math.PI * 3 / 4 + blade * Math.PI / 2;
+      const tipRadius = radius * 0.4;
+      const edgeRadius = radius;
+      const cornerRadius = radius * Math.SQRT2;
+      context.fillStyle = colorSequence[blade % colorSequence.length];
+      context.beginPath();
+      context.moveTo(Math.cos(angle) * tipRadius, Math.sin(angle) * tipRadius);
+      context.lineTo(Math.cos(angle - Math.PI / 4) * edgeRadius, Math.sin(angle - Math.PI / 4) * edgeRadius);
+      context.lineTo(Math.cos(angle) * cornerRadius, Math.sin(angle) * cornerRadius);
+      context.lineTo(Math.cos(angle + Math.PI / 4) * edgeRadius, Math.sin(angle + Math.PI / 4) * edgeRadius);
+      context.closePath();
+      context.fill();
+    }
+    context.fillStyle = "#272727";
+    context.beginPath();
+    for (let point = 0; point < 8; point += 1) {
+      const angle = -Math.PI / 8 + point * Math.PI / 4;
+      const hubRadius = radius * (point % 2 === 0 ? 0.44 : 0.36);
+      const hubX = Math.cos(angle) * hubRadius;
+      const hubY = Math.sin(angle) * hubRadius;
+      if (point === 0) context.moveTo(hubX, hubY);
+      else context.lineTo(hubX, hubY);
+    }
+    context.closePath();
+    context.fill();
     context.restore();
   }
 
@@ -1804,6 +2062,20 @@
     }
     context.closePath();
     context.fill();
+    context.restore();
+  }
+
+  function drawScorePopup(popup) {
+    const progress = popup.age / 0.75;
+    context.save();
+    context.globalAlpha = 1 - progress;
+    context.fillStyle = "#FFE80F";
+    context.font = `800 ${16 * gameScale()}px "Blissful Thinking", cursive`;
+    context.textAlign = "center";
+    context.textBaseline = "middle";
+    context.shadowColor = "rgba(0,0,0,.7)";
+    context.shadowBlur = 3 * gameScale();
+    context.fillText("+1", popup.x, popup.y);
     context.restore();
   }
 
@@ -1869,7 +2141,58 @@
     context.globalAlpha = 1;
   }
 
+  function circularSurfaceAt(ring, centerX, centerY, radius, rotation, x, y, colorSequence = ring.colors) {
+    const fullTurn = Math.PI * 2;
+    const relativeAngle = Math.atan2(y - centerY, x - centerX) - rotation;
+    const angle = ((relativeAngle % fullTurn) + fullTurn) % fullTurn;
+    const segmentAngle = fullTurn / colorSequence.length;
+    const segment = Math.min(ring.colors.length - 1, Math.floor(angle / segmentAngle));
+    return {
+      distance: Math.hypot(x - centerX, y - centerY) - radius,
+      color: colorSequence[segment]
+    };
+  }
+
+  function lineSectionAt(ring, x) {
+    const segmentWidth = width / ring.colors.length;
+    const segmentTravel = ring.linePhase + world.elapsed * ring.lineSpeed;
+    const segment = Math.floor((x - (ring.x - width / 2) + segmentTravel) / segmentWidth);
+    return lineColorAt(ring, segment);
+  }
+
   function ringSurfaceAt(ring, x, y) {
+    if (ring.pattern === "line") return { distance: y - ring.y, color: lineSectionAt(ring, x) };
+    if (ring.pattern === "twin") {
+      const pairRadius = twinSpinnerRadius(ring);
+      const pairOffset = twinSpinnerOffset(ring);
+      const left = circularSurfaceAt(ring, ring.x - pairOffset, ring.y, pairRadius, ring.angle, x, y);
+      const right = circularSurfaceAt(ring, ring.x + pairOffset, ring.y, pairRadius, -ring.angle, x, y, ring.twinColors);
+      return Math.abs(left.distance) < Math.abs(right.distance) ? left : right;
+    }
+
+    let surface = baseRingSurfaceAt(ring, x, y);
+    if (ring.pattern === "wheel") {
+      const segmentAngle = Math.PI * 2 / ring.sides;
+      for (let i = 0; i < ring.sides; i += 1) {
+        const angle = ring.angle + i * segmentAngle;
+        const start = {
+          x: ring.x + Math.cos(angle) * ring.radius * 0.28,
+          y: ring.y + Math.sin(angle) * ring.radius * 0.28
+        };
+        const end = {
+          x: ring.x + Math.cos(angle) * ring.radius * 0.78,
+          y: ring.y + Math.sin(angle) * ring.radius * 0.78
+        };
+        const spoke = nearestPointOnSegment(x, y, start, end);
+        if (spoke.distance < Math.abs(surface.distance)) {
+          surface = { distance: spoke.distance, color: ring.colors[i] };
+        }
+      }
+    }
+    return surface;
+  }
+
+  function baseRingSurfaceAt(ring, x, y) {
     const fullTurn = Math.PI * 2;
     const relativeAngle = Math.atan2(y - ring.y, x - ring.x) - ring.angle;
     const angle = ((relativeAngle % fullTurn) + fullTurn) % fullTurn;
@@ -1967,16 +2290,40 @@
 
   function checkRingContacts(previousX, previousY) {
     for (const ring of world.rings) {
-      const previous = ringSurfaceAt(ring, previousX, previousY);
-      const current = ringSurfaceAt(ring, player.x, player.y);
+      if (ring.pattern === "pinwheel") {
+        const distance = distanceToSegment(
+          0,
+          0,
+          previousX - (ring.previousX ?? ring.x),
+          previousY - ring.y,
+          player.x - ring.x,
+          player.y - ring.y
+        );
+        if (distance < player.radius + ring.radius * 0.76) {
+          showGameOver();
+          return false;
+        }
+        continue;
+      }
       const clearance = player.radius + ring.thickness / 2;
-      const crossedEdge = previous.distance * current.distance <= 0;
-      const touchingEdge = Math.abs(current.distance) <= clearance;
-      if (!crossedEdge && !touchingEdge) continue;
+      const pairRadius = twinSpinnerRadius(ring);
+      const pairOffset = twinSpinnerOffset(ring);
+      const sides = ring.pattern === "twin" ? [-1, 1] : [0];
+      for (const side of sides) {
+        const previous = side === 0
+          ? ringSurfaceAt(ring, previousX, previousY)
+          : circularSurfaceAt(ring, ring.x + side * pairOffset, ring.y, pairRadius, -side * ring.angle, previousX, previousY, side === -1 ? ring.colors : ring.twinColors);
+        const current = side === 0
+          ? ringSurfaceAt(ring, player.x, player.y)
+          : circularSurfaceAt(ring, ring.x + side * pairOffset, ring.y, pairRadius, -side * ring.angle, player.x, player.y, side === -1 ? ring.colors : ring.twinColors);
+        const crossedEdge = previous.distance * current.distance <= 0;
+        const touchingEdge = Math.abs(current.distance) <= clearance;
+        if (!crossedEdge && !touchingEdge) continue;
 
-      if (current.color !== player.color) {
-        showGameOver();
-        return false;
+        if (current.color !== player.color) {
+          showGameOver();
+          return false;
+        }
       }
     }
     return true;
@@ -1988,6 +2335,7 @@
       if (Math.hypot(player.x - star.x, player.y - star.y) < player.radius + starRadius()) {
         star.collected = true;
         world.score += 1;
+        world.scorePopups.push({ x: star.x, y: star.y - starRadius() * 1.4, age: 0 });
         scoreElement.textContent = String(world.score);
         playSoundEffect("star");
       }
@@ -1996,7 +2344,11 @@
       if (pickup.collected) continue;
       if (Math.hypot(player.x - pickup.x, player.y - pickup.y) < player.radius + pickupRadius()) {
         pickup.collected = true;
-        player.color = chooseDifferentColor(player.color);
+        const validColors = pickup.allowedColors ?? colors.map((_, index) => index);
+        const alternatives = validColors.filter((color) => color !== player.color);
+        player.color = alternatives.length
+          ? alternatives[Math.floor(Math.random() * alternatives.length)]
+          : validColors[Math.floor(Math.random() * validColors.length)];
         pickup.color = player.color;
         playSoundEffect("colorSwitch");
       }
@@ -2008,7 +2360,7 @@
     if (player.y >= followLine) return;
     const shift = followLine - player.y;
     player.y = followLine;
-    for (const item of [...world.rings, ...world.stars, ...world.pickups, ...world.trail]) item.y += shift;
+    for (const item of [...world.rings, ...world.stars, ...world.scorePopups, ...world.pickups, ...world.trail]) item.y += shift;
     if (world.finishLine?.orientation === "horizontal") world.finishLine.y += shift;
     if (runnerModes.has(world.mode)) {
       world.hopGroundY += shift;
@@ -2017,6 +2369,9 @@
         platform.y += shift;
         platform.baseY += shift;
       }
+    }
+    if (world.mode === "jump") {
+      for (const platform of world.jumpPlatforms) platform.y += shift;
     }
     if (world.mode === "bounce") {
       world.bounceFloorY += shift;
@@ -2049,12 +2404,15 @@
     const platform = world.spawnPlatform;
     if (!platform?.active) return;
     context.fillStyle = "#FFFFFF";
-    context.fillRect(
+    context.beginPath();
+    context.roundRect(
       platform.x - platform.width / 2,
       platform.y,
       platform.width,
-      platform.height
+      platform.height,
+      4 * gameScale()
     );
+    context.fill();
   }
 
   // Castle mode movement and floor progression.
@@ -2129,6 +2487,11 @@
   // Shared game loop and per-mode updates.
   function update(delta) {
     world.elapsed += delta;
+    for (const popup of world.scorePopups) {
+      popup.age += delta;
+      popup.y -= 24 * gameScale() * delta;
+    }
+    world.scorePopups = world.scorePopups.filter((popup) => popup.age < 0.75);
     const previousX = player.x;
     const previousY = player.y;
     if (world.mode === "kite") {
@@ -2145,7 +2508,7 @@
       for (const hole of world.hopHoles) hole.x -= travel;
       for (const saw of world.hopSaws) {
         saw.x -= travel;
-        saw.rotation += delta * 5;
+        saw.rotation += delta * 20;
       }
       for (const platform of world.hopPlatforms) {
         platform.x -= travel;
@@ -2166,7 +2529,7 @@
       }
       if (player.grounded && !player.hopPlatform && !hopGroundAt(player.x)) player.grounded = false;
       if (!player.grounded) {
-        player.velocity += hopGravity * gameScale() * delta;
+        player.velocity += (world.mode === "run" ? runGravity : hopGravity) * gameScale() * delta;
         player.y += player.velocity * delta;
         if (player.velocity >= 0 && previousY + player.radius <= world.hopGroundY
           && player.y + player.radius >= world.hopGroundY && hopGroundAt(player.x)) {
@@ -2316,9 +2679,37 @@
       && player.wallSide !== null
       && player.wallHangRemaining > 0;
     if (!runnerModes.has(world.mode) && world.mode !== "slime" && world.mode !== "castle"
-      && world.mode !== "kite" && !hangingOnBounceWall && !(world.mode === "bounce" && player.wallSide !== null)) {
+      && world.mode !== "kite" && !hangingOnBounceWall && !(world.mode === "bounce" && player.wallSide !== null)
+      && !(world.mode === "jump" && player.grounded)) {
       player.velocity += (world.mode === "bounce" ? bounceGravity : gravity) * gameScale() * delta;
       player.y += player.velocity * delta;
+      if (world.mode === "jump" && !player.grounded) player.x += player.velocityX * delta;
+    }
+    if (world.mode === "jump") {
+      for (const hazard of world.jumpHazards) {
+        if (Math.hypot(player.x - hazard.x, player.y - hazard.y) < player.radius + hazard.radius * 0.9) {
+          showGameOver();
+          return false;
+        }
+      }
+      if (player.velocity >= 0) {
+        const platforms = world.spawnPlatform?.active
+          ? [world.spawnPlatform, ...world.jumpPlatforms]
+          : world.jumpPlatforms;
+        for (const platform of platforms) {
+          const overlapsX = player.x + player.radius > platform.x
+            && player.x - player.radius < platform.x + platform.width;
+          if (previousY + player.radius <= platform.y
+            && player.y + player.radius >= platform.y && overlapsX) {
+            player.x = platform.x + platform.width / 2;
+            player.y = platform.y - player.radius;
+            player.velocity = 0;
+            player.velocityX = 0;
+            player.grounded = true;
+            break;
+          }
+        }
+      }
     }
     if (world.mode === "bounce") {
       const landedOnBounceFloor = world.bounceFloorY <= height
@@ -2345,8 +2736,20 @@
       player.y = platform.y - player.radius;
       player.velocity = 0;
     }
-    const classicDifficulty = world.mode === "classic" && !world.levelMode ? Math.min(0.5, world.elapsed / 180) : 0;
-    for (const ring of world.rings) ring.angle += ring.spin * (1 + classicDifficulty) * delta;
+    for (const ring of world.rings) {
+      if (ring.pattern === "pinwheel") {
+        ring.previousX = ring.x;
+        ring.x += ring.pathDirection * ring.pathSpeed * delta;
+        if (ring.x >= ring.pathMaxX) {
+          ring.x = ring.pathMaxX;
+          ring.pathDirection = -1;
+        } else if (ring.x <= ring.pathMinX) {
+          ring.x = ring.pathMinX;
+          ring.pathDirection = 1;
+        }
+      }
+      ring.angle += ring.spin * delta;
+    }
     for (const star of world.stars) {
       star.rotation += delta * 0.45;
       star.pulse += delta * 3;
@@ -2364,6 +2767,10 @@
     }
     updateCollectibles();
     if (checkLevelCompletion()) return false;
+    if (world.mode === "jump") {
+      world.jumpPlatforms = world.jumpPlatforms.filter((platform) => platform.y < height + 40);
+      ensureJumpCourse();
+    }
 
     const topRing = world.rings.reduce((top, ring) => Math.min(top, ring.y), Infinity);
     const nextRingY = topRing - ringSpacing();
@@ -2431,9 +2838,8 @@
     drawBackground();
     context.save();
     if (world.mode === "castle") {
-      const zoom = 1.35;
-      context.translate(0, height * 0.68 - player.y * zoom);
-      context.scale(1, zoom);
+      context.translate(0, height * 0.68 - player.y * castleCameraZoom);
+      context.scale(castleCameraZoom, castleCameraZoom);
     }
     if (world.mode === "castle") drawCastleArena();
     if (world.mode === "bounce") drawBounceArena();
@@ -2445,9 +2851,11 @@
     world.pickups.forEach(drawPickup);
     world.rings.forEach(drawRing);
     if (runnerModes.has(world.mode)) drawHopArena();
+    if (world.mode === "jump") drawJumpPlatforms();
     drawPlayerTrail();
     drawSlimeAim();
     drawPlayer();
+    world.scorePopups.forEach(drawScorePopup);
     context.restore();
   }
 
@@ -2492,13 +2900,8 @@
   window.addEventListener("blur", releaseKiteLift);
   document.addEventListener("keyup", releaseKiteLift);
   pauseButton.addEventListener("click", pauseGame);
-  fullscreenButton.addEventListener("click", toggleFullscreen);
-  document.addEventListener("fullscreenchange", () => {
-    updateFullscreenButton();
-    setCanvasSize();
-  });
-  fullscreenButton.disabled = !document.fullscreenEnabled || !document.documentElement.requestFullscreen;
-  updateFullscreenButton();
+  document.addEventListener("pointerdown", unlockBackgroundMusic, true);
+  document.addEventListener("keydown", unlockBackgroundMusic, true);
   document.addEventListener("keydown", handleInput);
   window.addEventListener("resize", setCanvasSize);
   setCanvasSize();
